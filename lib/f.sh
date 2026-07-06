@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# f.sh — interactive fuzzy selection menu (fzf-inspired, pure bash)
+# f.sh — interactive fuzzy selection menu (fzf-inspired, bash with optional awk/sort acceleration)
 #
 # Usage:
 #   source /path/to/lib/f.sh
@@ -38,9 +38,10 @@ _F_FD_TTY_IN=''
 _F_FD_TTY_OUT=''
 
 _f_items=()
+_f_items_lower=()
 _f_filtered=()
-_f_scores=()
 _f_query=''
+_f_query_lower=''
 _f_cursor=0
 _f_scroll=0
 _f_last_score=0
@@ -59,6 +60,18 @@ _f_resized=0
 _f_cancelled=0
 _f_tty_saved=''
 _f_have_tput=0
+_f_have_sort=0
+_f_have_awk=0
+
+_f_filter_tmpdir=''
+_f_filter_request_file=''
+_f_filter_request_seq=0
+_f_filter_ready_seq=0
+_f_filter_worker_seq=0
+_f_filter_worker_pid=''
+_f_filter_worker_file=''
+_f_filter_pending=0
+_f_filter_async_threshold=128
 
 # ---------------------------------------------------------------------------
 # Low-level TTY output (always writes to /dev/tty, never stdout)
@@ -216,6 +229,10 @@ f_init_terminal() {
   if command -v tput >/dev/null 2>&1; then
     tput cols <&${_F_FD_TTY_IN} >/dev/null 2>&1 && _f_have_tput=1
   fi
+  _f_have_sort=0
+  command -v sort >/dev/null 2>&1 && _f_have_sort=1
+  _f_have_awk=0
+  command -v awk >/dev/null 2>&1 && _f_have_awk=1
 
   _f_tty_saved=$(stty -g <&${_F_FD_TTY_IN} 2>/dev/null) || _f_tty_saved=''
 
@@ -257,6 +274,22 @@ f_restore_terminal() {
   fi
 
   _f_active=0
+
+  if [[ -n $_f_filter_worker_pid ]]; then
+    kill "$_f_filter_worker_pid" 2>/dev/null || true
+    wait "$_f_filter_worker_pid" 2>/dev/null || true
+  fi
+  _f_filter_worker_pid=''
+  _f_filter_worker_seq=0
+  _f_filter_worker_file=''
+  _f_filter_request_file=''
+  _f_filter_pending=0
+  _f_filter_ready_seq=0
+  _f_filter_request_seq=0
+  if [[ -n $_f_filter_tmpdir ]]; then
+    rm -rf -- "$_f_filter_tmpdir" 2>/dev/null || true
+    _f_filter_tmpdir=''
+  fi
 
   _f_clear_ui_region
   _f_tty $'\033[0m'
@@ -313,6 +346,16 @@ _f_on_signal() {
 _f_cfg_fuzzy()          { printf '%s' "${f_fuzzy:-1}"; }
 _f_cfg_smart_priority() { printf '%s' "${f_smart_priority:-0}"; }
 
+# Escape literal text for use in a shell glob pattern.
+_f_glob_escape() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\*/\\*}
+  s=${s//\?/\\?}
+  s=${s//\[/\\[}
+  printf '%s' "$s"
+}
+
 # Case-insensitive substring test (glob-safe for [, *, ?, etc.).
 _f_contains_ci() {
   local hay=${1,,} needle=${2,,}
@@ -320,48 +363,48 @@ _f_contains_ci() {
   [[ ${hay//"$needle"/} != "$hay" ]]
 }
 
-_f_substring_pos_ci() {
-  local text=$1 query=$2
-  local tlower=${text,,} qlower=${query,,}
-  local i n=${#qlower}
-  local max=$(( ${#tlower} - n ))
-  [[ $n -eq 0 ]] && { printf '0'; return 0; }
-  for ((i = 0; i <= max; i++)); do
-    [[ ${tlower:i:n} == "$qlower" ]] && { printf '%s' "$i"; return 0; }
+_f_prepare_items() {
+  local i n=${#_f_items[@]}
+  _f_items_lower=()
+  for ((i = 0; i < n; i++)); do
+    _f_items_lower[i]=${_f_items[i],,}
   done
-  return 1
+}
+
+_f_substring_pos_lc() {
+  local tlower=$1 qlower=$2 qpat prefix
+
+  [[ -z $qlower ]] && { printf '0'; return 0; }
+
+  [[ ${tlower//"$qlower"/} != "$tlower" ]] || return 1
+
+  qpat=$(_f_glob_escape "$qlower")
+  prefix=${tlower%%$qpat*}
+  printf '%s' "${#prefix}"
 }
 
 _f_substring_score() {
-  local query=$1 text=$2
-  local qlen=${#query} pos
-
-  if ((qlen == 0)); then
-    _f_last_score=0
-    return 0
-  fi
-
-  pos=$(_f_substring_pos_ci "$text" "$query") || return 1
+  local text_lower=$1 pos
+  pos=$(_f_substring_pos_lc "$text_lower" "$_f_query_lower") || return 1
   _f_last_score=$((10000 - pos))
   return 0
 }
 
 _f_fuzzy_score() {
-  local query=$1 text=$2
-  local qlen=${#query}
+  local text=$1 text_lower=$2
+  local qlen=${#_f_query_lower}
 
   if ((qlen == 0)); then
     _f_last_score=0
     return 0
   fi
 
-  local qlower=${query,,}
-  local tlower=${text,,}
-  local tlen=${#text}
+  local qlower=$_f_query_lower
+  local tlen=${#text_lower}
   local qi=0 ti=0 score=0 prev_match=-2 consec=0
 
   while ((ti < tlen && qi < qlen)); do
-    if [[ ${tlower:ti:1} == "${qlower:qi:1}" ]]; then
+    if [[ ${text_lower:ti:1} == "${qlower:qi:1}" ]]; then
       local bonus=0
       if ((prev_match == ti - 1)); then
         ((consec++))
@@ -371,7 +414,7 @@ _f_fuzzy_score() {
       fi
       ((ti == 0)) && ((bonus += 3))
       if ((ti > 0)); then
-        case ${tlower:ti-1:1} in
+        case ${text_lower:ti-1:1} in
           '/'|'-'|'_'|'.'|' '|$'\t') ((bonus += 4)) ;;
         esac
       fi
@@ -399,86 +442,94 @@ _f_fuzzy_score() {
 #           search — regardless of fuzzy quality, always ranked above tier 2.
 #   Tier 2 (fuzzy_score):            fuzzy-only matches, sorted by fuzzy quality.
 _f_item_score() {
-  local query=$1 text=$2
+  local text=$1 text_lower=$2
   local sub_score=0 fuzzy_score=0 has_sub=0 has_fuzzy=0
 
-  if _f_substring_score "$query" "$text"; then
+  if _f_substring_score "$text_lower"; then
     has_sub=1
     sub_score=$_f_last_score
-  fi
-
-  if (($(_f_cfg_fuzzy))); then
-    if _f_fuzzy_score "$query" "$text"; then
-      has_fuzzy=1
-      fuzzy_score=$_f_last_score
-    fi
-
-    # Smart fuzzy priority: guarantee normal matches always outrank fuzzy-only.
-    if (($(_f_cfg_smart_priority))); then
-      if ((has_sub)); then
-        # Tier 1 — passed normal (substring) search; score by position quality.
+    if (($(_f_cfg_fuzzy))); then
+      if (($(_f_cfg_smart_priority))); then
         _f_last_score=$((10000000 + sub_score))
         return 0
       fi
-      if ((has_fuzzy)); then
-        # Tier 2 — fuzzy-only; score by fuzzy quality.
-        _f_last_score=$fuzzy_score
-        return 0
-      fi
-      return 1
-    fi
-
-    if ((has_sub && has_fuzzy)); then
-      _f_last_score=$((3000000 + sub_score * 1000 + fuzzy_score))
-      return 0
-    fi
-    if ((has_sub)); then
       _f_last_score=$((2000000 + sub_score))
       return 0
     fi
-    if ((has_fuzzy)); then
+    _f_last_score=$sub_score
+    return 0
+  fi
+
+  if (($(_f_cfg_fuzzy))); then
+    if _f_fuzzy_score "$text" "$text_lower"; then
+      has_fuzzy=1
+      fuzzy_score=$_f_last_score
+      if (($(_f_cfg_smart_priority))); then
+        _f_last_score=$fuzzy_score
+        return 0
+      fi
       _f_last_score=$fuzzy_score
       return 0
     fi
-    return 1
-  fi
 
-  if ((has_sub)); then
-    _f_last_score=$sub_score
-    return 0
+    if (($(_f_cfg_smart_priority))); then
+      return 1
+    fi
+
+    return 1
   fi
   return 1
 }
 
 f_filter_items() {
   _f_filtered=()
-  _f_scores=()
 
   local i n=${#_f_items[@]}
+  local check_request=0 check_every=16
 
   if ((${#_f_query} == 0)); then
     for ((i = 0; i < n; i++)); do
       _f_filtered+=("$i")
-      _f_scores+=("0")
     done
     return 0
   fi
 
   local -a candidates=() cand_scores=()
+  if ((_f_have_awk)); then
+    local -a scored_rows=() row
+    mapfile -t scored_rows < <(_f_filter_items_awk_rows "$_f_query")
+    for row in "${scored_rows[@]}"; do
+      IFS=$'\t' read -r score idx <<<"$row"
+      candidates+=("$idx")
+      cand_scores+=("$score")
+    done
+  else
+    if [[ -n $_f_filter_request_file && $_f_filter_worker_seq -gt 0 ]]; then
+      check_request=1
+    fi
 
-  for ((i = 0; i < n; i++)); do
-    _f_item_score "$_f_query" "${_f_items[i]}" || continue
-    candidates+=("$i")
-    cand_scores+=("$_f_last_score")
-  done
+    for ((i = 0; i < n; i++)); do
+      if ((check_request && (i % check_every == 0))); then
+        _f_filter_worker_is_current "$_f_filter_worker_seq" "$_f_query" || return 2
+      fi
+      _f_item_score "${_f_items[i]}" "${_f_items_lower[i]}" || continue
+      candidates+=("$i")
+      cand_scores+=("$_f_last_score")
+    done
+  fi
 
   local m=${#candidates[@]}
   if ((m == 0)); then
     return 0
   fi
 
-  if ((m > 32)) && command -v sort >/dev/null 2>&1; then
+  if ((check_request)); then
+    _f_filter_worker_is_current "$_f_filter_worker_seq" "$_f_query" || return 2
+  fi
+
+  if ((m > 32)) && ((_f_have_sort)); then
     local -a rows=() sorted=() row score idx
+    local row_index=0
     for ((i = 0; i < m; i++)); do
       printf -v row '%020d\t%d' "${cand_scores[i]}" "${candidates[i]}"
       rows+=("$row")
@@ -486,14 +537,20 @@ f_filter_items() {
     mapfile -t sorted < <(printf '%s\n' "${rows[@]}" | sort -t $'\t' -k1,1r)
     for row in "${sorted[@]}"; do
       IFS=$'\t' read -r score idx <<<"$row"
+      if ((check_request && (row_index % check_every == 0))); then
+        _f_filter_worker_is_current "$_f_filter_worker_seq" "$_f_query" || return 2
+      fi
       _f_filtered+=("$idx")
-      _f_scores+=("$((10#${score}))")
+      ((row_index++))
     done
     return 0
   fi
 
   local a b tmp_i tmp_s best
   for ((a = 0; a < m; a++)); do
+    if ((check_request && (a % check_every == 0))); then
+      _f_filter_worker_is_current "$_f_filter_worker_seq" "$_f_query" || return 2
+    fi
     best=$a
     for ((b = a + 1; b < m; b++)); do
       ((cand_scores[b] > cand_scores[best])) && best=$b
@@ -503,8 +560,259 @@ f_filter_items() {
       tmp_s=${cand_scores[a]}; cand_scores[a]=${cand_scores[best]}; cand_scores[best]=$tmp_s
     fi
     _f_filtered+=("${candidates[a]}")
-    _f_scores+=("${cand_scores[a]}")
   done
+}
+
+_f_filter_items_awk_rows() {
+  local query=$1 fuzzy=$(_f_cfg_fuzzy) smart=$(_f_cfg_smart_priority)
+
+  printf '%s\n' "${_f_items[@]}" | awk -v query="$query" -v fuzzy="$fuzzy" -v smart="$smart" '
+    function fuzzy_score(text, query,    tl, ql, tlen, qlen, ti, qi, score, prev_match, consec, bonus, prev_ch, cur_ch) {
+      tl = tolower(text)
+      ql = tolower(query)
+      tlen = length(tl)
+      qlen = length(ql)
+      if (qlen == 0) {
+        return 0
+      }
+      qi = 1
+      ti = 1
+      score = 0
+      prev_match = -2
+      consec = 0
+      while (ti <= tlen && qi <= qlen) {
+        if (substr(tl, ti, 1) == substr(ql, qi, 1)) {
+          bonus = 0
+          if (prev_match == ti - 1) {
+            consec++
+            bonus += 2 + consec
+          } else {
+            consec = 0
+          }
+          if (ti == 1) {
+            bonus += 3
+          }
+          if (ti > 1) {
+            prev_ch = substr(tl, ti - 1, 1)
+            if (prev_ch ~ /[\/._ \t-]/) {
+              bonus += 4
+            }
+            prev_ch = substr(text, ti - 1, 1)
+            cur_ch = substr(text, ti, 1)
+            if (prev_ch ~ /[a-z]/ && cur_ch ~ /[A-Z]/) {
+              bonus += 3
+            }
+          }
+          score += 1 + bonus
+          prev_match = ti
+          qi++
+        }
+        ti++
+      }
+      if (qi > qlen) {
+        return score * 10000 - length(text)
+      }
+      return -1
+    }
+
+    {
+      idx = NR - 1
+      if (query == "") {
+        print "0\t" idx
+        next
+      }
+
+      tl = tolower($0)
+      ql = tolower(query)
+      pos = index(tl, ql)
+      has_sub = (pos > 0)
+      sub_score = has_sub ? (10001 - pos) : 0
+
+      if (fuzzy == 0) {
+        if (has_sub) {
+          print sub_score "\t" idx
+        }
+        next
+      }
+
+      if (smart == 1 && has_sub) {
+        print (10000000 + sub_score) "\t" idx
+        next
+      }
+
+      if (has_sub) {
+        print (2000000 + sub_score) "\t" idx
+        next
+      }
+
+      fuzzy_rank = fuzzy_score($0, query)
+      has_fuzzy = (fuzzy_rank >= 0)
+
+      if (smart == 1) {
+        if (has_fuzzy) {
+          print fuzzy_rank "\t" idx
+        }
+        next
+      }
+
+      if (has_fuzzy) {
+        print fuzzy_rank "\t" idx
+      }
+    }
+  '
+}
+
+_f_filter_ensure_tmpdir() {
+  if [[ -n $_f_filter_tmpdir ]]; then
+    return 0
+  fi
+
+  if command -v mktemp >/dev/null 2>&1; then
+    _f_filter_tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/fsh.XXXXXX" 2>/dev/null) || _f_filter_tmpdir=''
+  fi
+
+  if [[ -z $_f_filter_tmpdir ]]; then
+    _f_filter_tmpdir="${TMPDIR:-/tmp}/fsh.${BASHPID:-$$}"
+    mkdir -p -- "$_f_filter_tmpdir" 2>/dev/null || return 1
+  fi
+
+  _f_filter_request_file="$_f_filter_tmpdir/request"
+
+  return 0
+}
+
+_f_filter_write_request() {
+  local seq=$1 query=$2 tmp_file
+
+  _f_filter_ensure_tmpdir || return 1
+  tmp_file="${_f_filter_request_file}.tmp.${BASHPID:-$$}"
+  printf '%s\t%s\n' "$seq" "$query" >"$tmp_file" && mv -f -- "$tmp_file" "$_f_filter_request_file"
+}
+
+_f_filter_worker_is_current() {
+  local seq=$1 query=$2 request_seq request_query
+
+  [[ -f $_f_filter_request_file ]] || return 1
+  IFS=$'\t' read -r request_seq request_query < "$_f_filter_request_file" 2>/dev/null || return 1
+  [[ $request_seq == "$seq" && $request_query == "$query" ]]
+}
+
+_f_filter_worker() {
+  local seq=$1 query=$2 result_file=$3 tmp_file
+
+  _f_filter_worker_is_current "$seq" "$query" || return 2
+  _f_query=$query
+  _f_query_lower=${query,,}
+  f_filter_items || return $?
+  _f_filter_worker_is_current "$seq" "$query" || return 2
+
+  tmp_file="${result_file}.tmp.${BASHPID:-$$}"
+  {
+    local idx
+    for idx in "${_f_filtered[@]}"; do
+      printf '%s\n' "$idx"
+    done
+  } >"$tmp_file" && mv -f -- "$tmp_file" "$result_file"
+}
+
+_f_filter_start_worker() {
+  local seq=$1 query=$2
+
+  _f_filter_ensure_tmpdir || return 1
+
+  _f_filter_worker_seq=$seq
+  _f_filter_worker_file="$_f_filter_tmpdir/filter.$seq"
+  _f_filter_pending=1
+
+  _f_filter_write_request "$seq" "$query" || return 1
+  _f_filter_worker "$seq" "$query" "$_f_filter_worker_file" &
+  _f_filter_worker_pid=$!
+}
+
+_f_filter_sync_current() {
+  _f_query_lower=${_f_query,,}
+  f_filter_items
+  _f_filter_ready_seq=$_f_filter_request_seq
+  _f_filter_pending=0
+}
+
+_f_filter_poll_worker() {
+  local pid=$_f_filter_worker_pid seq=$_f_filter_worker_seq file=$_f_filter_worker_file
+
+  if [[ -z $pid ]]; then
+    if ((_f_filter_request_seq > _f_filter_ready_seq)) && ((${#_f_query} > 0)) && ((${#_f_items[@]} > _f_filter_async_threshold)); then
+      _f_filter_start_worker "$_f_filter_request_seq" "$_f_query" || {
+        _f_filter_sync_current
+        return 0
+      }
+    fi
+    return 1
+  fi
+
+  if kill -0 "$pid" 2>/dev/null; then
+    return 1
+  fi
+
+  wait "$pid" 2>/dev/null || true
+  _f_filter_worker_pid=''
+
+  if [[ -f $file ]]; then
+    if ((seq == _f_filter_request_seq)); then
+      mapfile -t _f_filtered < "$file"
+      _f_filter_ready_seq=$seq
+      _f_filter_pending=0
+    fi
+    rm -f -- "$file" 2>/dev/null || true
+  fi
+
+  _f_filter_worker_seq=0
+  _f_filter_worker_file=''
+
+  if ((_f_filter_request_seq > _f_filter_ready_seq)) && ((${#_f_query} > 0)) && ((${#_f_items[@]} > _f_filter_async_threshold)); then
+    _f_filter_start_worker "$_f_filter_request_seq" "$_f_query" || {
+      _f_filter_sync_current
+      return 0
+    }
+  fi
+
+  return 0
+}
+
+_f_filter_request() {
+  local query=$1
+
+  _f_filter_request_seq=$((_f_filter_request_seq + 1))
+  _f_query=$query
+  _f_query_lower=${query,,}
+  _f_cursor=0
+  _f_scroll=0
+
+  if [[ -n $_f_filter_worker_pid ]]; then
+    kill "$_f_filter_worker_pid" 2>/dev/null || true
+    wait "$_f_filter_worker_pid" 2>/dev/null || true
+    _f_filter_worker_pid=''
+    _f_filter_worker_seq=0
+    _f_filter_worker_file=''
+  fi
+
+  if [[ -n $_f_filter_worker_pid || -n $_f_filter_request_file ]]; then
+    _f_filter_write_request "$_f_filter_request_seq" "$query" || true
+  fi
+
+  if ((${#query} == 0)) || ((${#_f_items[@]} <= _f_filter_async_threshold)); then
+    _f_filter_sync_current
+    return 0
+  fi
+
+  if [[ -z $_f_filter_worker_pid ]]; then
+    _f_filter_start_worker "$_f_filter_request_seq" "$query" || {
+      _f_filter_sync_current
+      return 0
+    }
+    return 0
+  fi
+
+  _f_filter_pending=1
 }
 
 # ---------------------------------------------------------------------------
@@ -524,7 +832,7 @@ _f_truncate() {
 
 _f_highlight_substring() {
   local query=$1 text=$2
-  local qlen=${#query} start end
+  local qlen=${#query} start end text_lower=${text,,} query_lower=${query,,}
   local c_match=${f_color_match:-$'\033[1;33m'}
   local c_reset=${f_reset:-$'\033[0m'}
   local c_normal=${f_color_normal:-$'\033[0m'}
@@ -534,7 +842,7 @@ _f_highlight_substring() {
     return
   fi
 
-  start=$(_f_substring_pos_ci "$text" "$query")
+  start=$(_f_substring_pos_lc "$text_lower" "$query_lower")
   end=$((start + qlen))
   _f_last_string="${text:0:start}${c_match}${text:start:qlen}${c_reset}${c_normal}${text:end}${c_reset}"
 }
@@ -716,7 +1024,9 @@ f_render_status() {
   local c_reset=${f_reset:-$'\033[0m'}
 
   if (($(_f_cfg_status))); then
-    if ((${#_f_query} > 0)); then
+    if ((_f_filter_pending)); then
+      text='searching…'
+    elif ((${#_f_query} > 0)); then
       if ((total == 0)); then
         text='no matches'
       else
@@ -820,12 +1130,17 @@ _f_tty_raw_mode() {
 }
 
 f_read_key() {
+  local _timeout=${1:-}
   _f_last_key=''
   local k k1 k2 k3 rest
 
   # Always read in blocking raw mode so Enter (\r) is not dropped or split.
   _f_tty_set_raw
-  _f_read_byte k || return 1
+  if [[ -n $_timeout ]]; then
+    _f_read_byte k "$_timeout" || return 1
+  else
+    _f_read_byte k || return 1
+  fi
 
   # Detect Enter by byte value (terminals may send \r, \n, or CRLF).
   if _f_key_is_enter "$k"; then
@@ -912,17 +1227,25 @@ f_select() {
     printf 'f.sh: f_select: no items provided\n' >&2
     return 1
   fi
+  _f_prepare_items
   _f_query=''
+  _f_query_lower=''
   _f_cursor=0
   _f_scroll=0
   _f_cancelled=0
+  _f_filter_request_seq=0
+  _f_filter_ready_seq=0
+  _f_filter_worker_seq=0
+  _f_filter_worker_pid=''
+  _f_filter_worker_file=''
+  _f_filter_pending=0
 
   f_init_terminal || return 1
   _f_setup_traps
 
   local selected='' key keychar
 
-  f_filter_items
+  _f_filter_request ''
   f_render
 
   while true; do
@@ -931,41 +1254,53 @@ f_select() {
       f_render
     fi
 
+    if _f_filter_poll_worker; then
+      f_render
+    fi
+
     # Signal handler already restored the terminal.
     if ((_f_cancelled)); then
       return 1
     fi
 
-    if ! f_read_key; then
+    if ! f_read_key 0.05; then
       continue
     fi
     key=$_f_last_key
+    local needs_render=0
 
     case "$key" in
       up)
         ((_f_cursor > 0)) && ((_f_cursor--))
+        needs_render=1
         ;;
       down)
         if ((${#_f_filtered[@]} > 0)); then
           ((_f_cursor < ${#_f_filtered[@]} - 1)) && ((_f_cursor++))
         fi
+        needs_render=1
         ;;
       backspace|delete)
         if ((${#_f_query} > 0)); then
           _f_query=${_f_query:0:${#_f_query}-1}
           _f_cursor=0
           _f_scroll=0
-          f_filter_items
+          _f_filter_request "$_f_query"
         fi
+        needs_render=1
         ;;
       char:*)
         keychar=${key#char:}
         _f_query+="$keychar"
         _f_cursor=0
         _f_scroll=0
-        f_filter_items
+        _f_filter_request "$_f_query"
+        needs_render=1
         ;;
       enter)
+        if ((_f_filter_pending)); then
+          continue
+        fi
         if ((${#_f_filtered[@]} > 0)); then
           local pick=${_f_filtered[_f_cursor]}
           selected=${_f_items[pick]}
@@ -997,7 +1332,7 @@ f_select() {
         ;;
     esac
 
-    f_render
+    ((needs_render)) && f_render
   done
 }
 

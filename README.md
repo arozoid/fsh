@@ -6,6 +6,7 @@
 
 - bash 4+ (or any other bash-based terminal like zsh)
 - a controlling terminal (/dev/tty)
+- `awk` for fast search filtering
 - extra tools each script wraps (ex. grim, slurp, bluetoothctl)
 
 ---
@@ -145,6 +146,8 @@ choice=$(f_select "${items[@]}") || exit 1
 `f_init_terminal` uses `exec {var}</dev/tty` (bash 4.1+ auto-allocation, picks fd ≥ 10) with a fallback to explicit fds 10–14. This avoids conflicts with bash's internal script-reading fd, which lives in the 0–9 range — particularly important when a script is launched as a subprocess with only fds 0–2 inherited.
 
 keys: `↑` `↓` to move, type to filter, enter to select, esc to cancel.
+
+When a search is still loading on larger lists, the prompt stays live so you can keep typing; the status line shows `searching…` until the latest results are ready.
 
 demo:
 
