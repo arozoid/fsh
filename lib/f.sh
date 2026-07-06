@@ -69,9 +69,10 @@ _f_filter_request_seq=0
 _f_filter_ready_seq=0
 _f_filter_worker_seq=0
 _f_filter_worker_pid=''
+_f_filter_worker_pids=()
 _f_filter_worker_file=''
 _f_filter_pending=0
-_f_filter_async_threshold=128
+_f_filter_async_threshold=256
 
 # ---------------------------------------------------------------------------
 # Low-level TTY output (always writes to /dev/tty, never stdout)
@@ -168,14 +169,20 @@ _f_cfg_prompt() { printf '%s' "${f_prompt:-'> '}"; }
 _f_cfg_hints() { printf '%s' "${f_hints:-1}"; }
 _f_cfg_marker() { printf '%s' "${f_marker:-1}"; }
 _f_cfg_status() { printf '%s' "${f_status:-1}"; }
+_f_visible_height() {
+  local visible=$(_f_cfg_height)
+  ((visible > 100)) && visible=100
+  printf '%s' "$visible"
+}
 
 _f_compute_layout() {
   local border_rows=0 status_rows=0
+  local visible=$(_f_visible_height)
   (($(_f_cfg_border))) && border_rows=2
   if (($(_f_cfg_status))) || (($(_f_cfg_hints))); then
     status_rows=1
   fi
-  _f_ui_height=$(($(_f_cfg_height) + 1 + border_rows + status_rows))
+  _f_ui_height=$((visible + 1 + border_rows + status_rows))
   _f_prompt_row=$_f_term_h
   _f_status_row=$((_f_term_h - 1))
   _f_start_row=$((_f_term_h - _f_ui_height + 1))
@@ -275,11 +282,17 @@ f_restore_terminal() {
 
   _f_active=0
 
+  local pid
+  for pid in "${_f_filter_worker_pids[@]}"; do
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  done
   if [[ -n $_f_filter_worker_pid ]]; then
     kill "$_f_filter_worker_pid" 2>/dev/null || true
     wait "$_f_filter_worker_pid" 2>/dev/null || true
   fi
   _f_filter_worker_pid=''
+  _f_filter_worker_pids=()
   _f_filter_worker_seq=0
   _f_filter_worker_file=''
   _f_filter_request_file=''
@@ -697,6 +710,21 @@ _f_filter_worker_is_current() {
   [[ $request_seq == "$seq" && $request_query == "$query" ]]
 }
 
+_f_filter_reap_stale_workers() {
+  local pid
+  local -a live_pids=()
+
+  for pid in "${_f_filter_worker_pids[@]}"; do
+    if kill -0 "$pid" 2>/dev/null; then
+      live_pids+=("$pid")
+    else
+      wait "$pid" 2>/dev/null || true
+    fi
+  done
+
+  _f_filter_worker_pids=("${live_pids[@]}")
+}
+
 _f_filter_worker() {
   local seq=$1 query=$2 result_file=$3 tmp_file
 
@@ -738,6 +766,8 @@ _f_filter_sync_current() {
 
 _f_filter_poll_worker() {
   local pid=$_f_filter_worker_pid seq=$_f_filter_worker_seq file=$_f_filter_worker_file
+
+  _f_filter_reap_stale_workers
 
   if [[ -z $pid ]]; then
     if ((_f_filter_request_seq > _f_filter_ready_seq)) && ((${#_f_query} > 0)) && ((${#_f_items[@]} > _f_filter_async_threshold)); then
@@ -789,30 +819,23 @@ _f_filter_request() {
 
   if [[ -n $_f_filter_worker_pid ]]; then
     kill "$_f_filter_worker_pid" 2>/dev/null || true
-    wait "$_f_filter_worker_pid" 2>/dev/null || true
+    _f_filter_worker_pids+=("$_f_filter_worker_pid")
     _f_filter_worker_pid=''
     _f_filter_worker_seq=0
     _f_filter_worker_file=''
   fi
 
-  if [[ -n $_f_filter_worker_pid || -n $_f_filter_request_file ]]; then
-    _f_filter_write_request "$_f_filter_request_seq" "$query" || true
-  fi
+  _f_filter_write_request "$_f_filter_request_seq" "$query" || true
 
   if ((${#query} == 0)) || ((${#_f_items[@]} <= _f_filter_async_threshold)); then
     _f_filter_sync_current
     return 0
   fi
 
-  if [[ -z $_f_filter_worker_pid ]]; then
-    _f_filter_start_worker "$_f_filter_request_seq" "$query" || {
-      _f_filter_sync_current
-      return 0
-    }
+  _f_filter_start_worker "$_f_filter_request_seq" "$query" || {
+    _f_filter_sync_current
     return 0
-  fi
-
-  _f_filter_pending=1
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -891,7 +914,7 @@ _f_highlight_matches() {
 
 _f_sync_scroll() {
   local total=${#_f_filtered[@]}
-  local visible=$(_f_cfg_height)
+  local visible=$(_f_visible_height)
 
   if ((total == 0)); then
     _f_cursor=0
@@ -927,7 +950,7 @@ f_render_results() {
   local width=$_f_term_w
   local inner_width=$width
   local total=${#_f_filtered[@]}
-  local visible=$(_f_cfg_height)
+  local visible=$(_f_visible_height)
   local r idx item_idx item plain rendered line prefix border marker
   local marker_w=0 scroll_up=0 scroll_down=0
   local c_border=${f_color_border:-$'\033[90m'}
@@ -1019,7 +1042,7 @@ f_render_results() {
 }
 
 f_render_status() {
-  local total=${#_f_filtered[@]} visible=$(_f_cfg_height) text='' hints=''
+  local total=${#_f_filtered[@]} visible=$(_f_visible_height) text='' hints=''
   local c_dim=${f_color_dim:-$'\033[2m'}
   local c_reset=${f_reset:-$'\033[0m'}
 
@@ -1067,9 +1090,19 @@ f_render_prompt() {
   _f_tty_clear_eol
 }
 
+f_render_prompt_status() {
+  _f_update_dimensions
+  _f_compute_layout
+  _f_tty_hide_cursor
+  f_render_status
+  f_render_prompt
+  f_move_to_bottom
+}
+
 f_render() {
   _f_update_dimensions
   _f_compute_layout
+  _f_clear_ui_region
   _f_tty_hide_cursor
   f_render_results
   f_render_status
@@ -1287,7 +1320,11 @@ f_select() {
           _f_scroll=0
           _f_filter_request "$_f_query"
         fi
-        needs_render=1
+        if ((_f_filter_pending)); then
+          f_render_prompt_status
+        else
+          needs_render=1
+        fi
         ;;
       char:*)
         keychar=${key#char:}
@@ -1295,7 +1332,11 @@ f_select() {
         _f_cursor=0
         _f_scroll=0
         _f_filter_request "$_f_query"
-        needs_render=1
+        if ((_f_filter_pending)); then
+          f_render_prompt_status
+        else
+          needs_render=1
+        fi
         ;;
       enter)
         if ((_f_filter_pending)); then
