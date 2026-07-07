@@ -125,6 +125,7 @@ main() {
     delay=$(pick_delay) || continue
     path=$(capture "$mode" "$delay")
     printf 'Saved %s\n' "$path"
+    sleep 1
   done
 }
 
