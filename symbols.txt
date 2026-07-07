@@ -1,0 +1,468 @@
+# Arrows
+← left arrow
+↑ up arrow
+→ right arrow
+↓ down arrow
+↔ left right arrow
+↕ up down arrow
+⇐ left double arrow
+⇒ implies
+⇔ iff
+↩ return
+↪ right hook
+
+# Math
+± plus minus
+× multiplication
+÷ division
+√ square root
+∞ infinity
+≈ approximately equal
+≠ not equal
+≤ less than or equal
+≥ greater than or equal
+∑ summation
+∏ product
+∫ integral
+∂ partial differential
+∇ nabla
+∈ element of
+∉ not element of
+∩ intersection
+∪ union
+⊂ subset
+⊆ subset or equal
+∅ empty set
+∴ therefore
+∵ because
+
+# Greek
+α alpha
+β beta
+γ gamma
+δ delta
+ε epsilon
+ζ zeta
+η eta
+θ theta
+ι iota
+κ kappa
+λ lambda
+μ mu
+ν nu
+ξ xi
+π pi
+ρ rho
+σ sigma
+τ tau
+φ phi
+χ chi
+ψ psi
+ω omega
+Α capital alpha
+Β capital beta
+Γ capital gamma
+Δ capital delta
+Θ capital theta
+Λ capital lambda
+Ξ capital xi
+Π capital pi
+Σ capital sigma
+Φ capital phi
+Ψ capital psi
+Ω capital omega
+
+# Science
+⚗ alembic
+⚛ atom
+🧪 test tube
+🧫 petri dish
+🧬 dna
+🔬 microscope
+⚕ medical
+
+# GUI
+⌘ command
+⌥ option
+⌃ control
+⇧ shift
+⇪ caps lock
+⌫ backspace
+⌦ delete
+⏎ enter
+⎋ escape
+⌂ home
+⌖ position
+⏻ power
+▶ play
+⏸ pause
+⏹ stop
+⏺ record
+
+# Currency
+$ dollar
+¢ cent
+£ pound
+¥ yen
+€ euro
+₱ philippine peso
+₹ indian rupee
+₩ won
+₽ ruble
+₺ lira
+₪ shekel
+₫ dong
+₴ hryvnia
+₦ naira
+₿ bitcoin
+¤ generic currency
+
+# Box Drawing
+─ light horizontal
+│ light vertical
+┌ top left
+┐ top right
+└ bottom left
+┘ bottom right
+├ tee right
+┤ tee left
+┬ tee down
+┴ tee up
+┼ cross
+═ double horizontal
+║ double vertical
+╔ double top left
+╗ double top right
+╚ double bottom left
+╝ double bottom right
+╠ double tee
+╣ double tee
+╦ double tee
+╩ double tee
+╬ double cross
+
+# Blocks
+█ full block
+▓ dark shade
+▒ medium shade
+░ light shade
+▀ upper half
+▄ lower half
+▌ left half
+▐ right half
+▖ quadrant
+▗ quadrant
+▘ quadrant
+▝ quadrant
+
+# Braille
+⠀ blank braille pattern
+⠁ braille pattern u+2801
+⠂ braille pattern u+2802
+⠃ braille pattern u+2803
+⠄ braille pattern u+2804
+⠅ braille pattern u+2805
+⠆ braille pattern u+2806
+⠇ braille pattern u+2807
+⠈ braille pattern u+2808
+⠉ braille pattern u+2809
+⠊ braille pattern u+280A
+⠋ braille pattern u+280B
+⠌ braille pattern u+280C
+⠍ braille pattern u+280D
+⠎ braille pattern u+280E
+⠏ braille pattern u+280F
+⠐ braille pattern u+2810
+⠑ braille pattern u+2811
+⠒ braille pattern u+2812
+⠓ braille pattern u+2813
+⠔ braille pattern u+2814
+⠕ braille pattern u+2815
+⠖ braille pattern u+2816
+⠗ braille pattern u+2817
+⠘ braille pattern u+2818
+⠙ braille pattern u+2819
+⠚ braille pattern u+281A
+⠛ braille pattern u+281B
+⠜ braille pattern u+281C
+⠝ braille pattern u+281D
+⠞ braille pattern u+281E
+⠟ braille pattern u+281F
+⠠ braille pattern u+2820
+⠡ braille pattern u+2821
+⠢ braille pattern u+2822
+⠣ braille pattern u+2823
+⠤ braille pattern u+2824
+⠥ braille pattern u+2825
+⠦ braille pattern u+2826
+⠧ braille pattern u+2827
+⠨ braille pattern u+2828
+⠩ braille pattern u+2829
+⠪ braille pattern u+282A
+⠫ braille pattern u+282B
+⠬ braille pattern u+282C
+⠭ braille pattern u+282D
+⠮ braille pattern u+282E
+⠯ braille pattern u+282F
+⠰ braille pattern u+2830
+⠱ braille pattern u+2831
+⠲ braille pattern u+2832
+⠳ braille pattern u+2833
+⠴ braille pattern u+2834
+⠵ braille pattern u+2835
+⠶ braille pattern u+2836
+⠷ braille pattern u+2837
+⠸ braille pattern u+2838
+⠹ braille pattern u+2839
+⠺ braille pattern u+283A
+⠻ braille pattern u+283B
+⠼ braille pattern u+283C
+⠽ braille pattern u+283D
+⠾ braille pattern u+283E
+⠿ braille pattern u+283F
+⡀ braille pattern u+2840
+⡁ braille pattern u+2841
+⡂ braille pattern u+2842
+⡃ braille pattern u+2843
+⡄ braille pattern u+2844
+⡅ braille pattern u+2845
+⡆ braille pattern u+2846
+⡇ braille pattern u+2847
+⡈ braille pattern u+2848
+⡉ braille pattern u+2849
+⡊ braille pattern u+284A
+⡋ braille pattern u+284B
+⡌ braille pattern u+284C
+⡍ braille pattern u+284D
+⡎ braille pattern u+284E
+⡏ braille pattern u+284F
+⡐ braille pattern u+2850
+⡑ braille pattern u+2851
+⡒ braille pattern u+2852
+⡓ braille pattern u+2853
+⡔ braille pattern u+2854
+⡕ braille pattern u+2855
+⡖ braille pattern u+2856
+⡗ braille pattern u+2857
+⡘ braille pattern u+2858
+⡙ braille pattern u+2859
+⡚ braille pattern u+285A
+⡛ braille pattern u+285B
+⡜ braille pattern u+285C
+⡝ braille pattern u+285D
+⡞ braille pattern u+285E
+⡟ braille pattern u+285F
+⡠ braille pattern u+2860
+⡡ braille pattern u+2861
+⡢ braille pattern u+2862
+⡣ braille pattern u+2863
+⡤ braille pattern u+2864
+⡥ braille pattern u+2865
+⡦ braille pattern u+2866
+⡧ braille pattern u+2867
+⡨ braille pattern u+2868
+⡩ braille pattern u+2869
+⡪ braille pattern u+286A
+⡫ braille pattern u+286B
+⡬ braille pattern u+286C
+⡭ braille pattern u+286D
+⡮ braille pattern u+286E
+⡯ braille pattern u+286F
+⡰ braille pattern u+2870
+⡱ braille pattern u+2871
+⡲ braille pattern u+2872
+⡳ braille pattern u+2873
+⡴ braille pattern u+2874
+⡵ braille pattern u+2875
+⡶ braille pattern u+2876
+⡷ braille pattern u+2877
+⡸ braille pattern u+2878
+⡹ braille pattern u+2879
+⡺ braille pattern u+287A
+⡻ braille pattern u+287B
+⡼ braille pattern u+287C
+⡽ braille pattern u+287D
+⡾ braille pattern u+287E
+⡿ braille pattern u+287F
+⢀ braille pattern u+2880
+⢁ braille pattern u+2881
+⢂ braille pattern u+2882
+⢃ braille pattern u+2883
+⢄ braille pattern u+2884
+⢅ braille pattern u+2885
+⢆ braille pattern u+2886
+⢇ braille pattern u+2887
+⢈ braille pattern u+2888
+⢉ braille pattern u+2889
+⢊ braille pattern u+288A
+⢋ braille pattern u+288B
+⢌ braille pattern u+288C
+⢍ braille pattern u+288D
+⢎ braille pattern u+288E
+⢏ braille pattern u+288F
+⢐ braille pattern u+2890
+⢑ braille pattern u+2891
+⢒ braille pattern u+2892
+⢓ braille pattern u+2893
+⢔ braille pattern u+2894
+⢕ braille pattern u+2895
+⢖ braille pattern u+2896
+⢗ braille pattern u+2897
+⢘ braille pattern u+2898
+⢙ braille pattern u+2899
+⢚ braille pattern u+289A
+⢛ braille pattern u+289B
+⢜ braille pattern u+289C
+⢝ braille pattern u+289D
+⢞ braille pattern u+289E
+⢟ braille pattern u+289F
+⢠ braille pattern u+28A0
+⢡ braille pattern u+28A1
+⢢ braille pattern u+28A2
+⢣ braille pattern u+28A3
+⢤ braille pattern u+28A4
+⢥ braille pattern u+28A5
+⢦ braille pattern u+28A6
+⢧ braille pattern u+28A7
+⢨ braille pattern u+28A8
+⢩ braille pattern u+28A9
+⢪ braille pattern u+28AA
+⢫ braille pattern u+28AB
+⢬ braille pattern u+28AC
+⢭ braille pattern u+28AD
+⢮ braille pattern u+28AE
+⢯ braille pattern u+28AF
+⢰ braille pattern u+28B0
+⢱ braille pattern u+28B1
+⢲ braille pattern u+28B2
+⢳ braille pattern u+28B3
+⢴ braille pattern u+28B4
+⢵ braille pattern u+28B5
+⢶ braille pattern u+28B6
+⢷ braille pattern u+28B7
+⢸ braille pattern u+28B8
+⢹ braille pattern u+28B9
+⢺ braille pattern u+28BA
+⢻ braille pattern u+28BB
+⢼ braille pattern u+28BC
+⢽ braille pattern u+28BD
+⢾ braille pattern u+28BE
+⢿ braille pattern u+28BF
+⣀ braille pattern u+28C0
+⣁ braille pattern u+28C1
+⣂ braille pattern u+28C2
+⣃ braille pattern u+28C3
+⣄ braille pattern u+28C4
+⣅ braille pattern u+28C5
+⣆ braille pattern u+28C6
+⣇ braille pattern u+28C7
+⣈ braille pattern u+28C8
+⣉ braille pattern u+28C9
+⣊ braille pattern u+28CA
+⣋ braille pattern u+28CB
+⣌ braille pattern u+28CC
+⣍ braille pattern u+28CD
+⣎ braille pattern u+28CE
+⣏ braille pattern u+28CF
+⣐ braille pattern u+28D0
+⣑ braille pattern u+28D1
+⣒ braille pattern u+28D2
+⣓ braille pattern u+28D3
+⣔ braille pattern u+28D4
+⣕ braille pattern u+28D5
+⣖ braille pattern u+28D6
+⣗ braille pattern u+28D7
+⣘ braille pattern u+28D8
+⣙ braille pattern u+28D9
+⣚ braille pattern u+28DA
+⣛ braille pattern u+28DB
+⣜ braille pattern u+28DC
+⣝ braille pattern u+28DD
+⣞ braille pattern u+28DE
+⣟ braille pattern u+28DF
+⣠ braille pattern u+28E0
+⣡ braille pattern u+28E1
+⣢ braille pattern u+28E2
+⣣ braille pattern u+28E3
+⣤ braille pattern u+28E4
+⣥ braille pattern u+28E5
+⣦ braille pattern u+28E6
+⣧ braille pattern u+28E7
+⣨ braille pattern u+28E8
+⣩ braille pattern u+28E9
+⣪ braille pattern u+28EA
+⣫ braille pattern u+28EB
+⣬ braille pattern u+28EC
+⣭ braille pattern u+28ED
+⣮ braille pattern u+28EE
+⣯ braille pattern u+28EF
+⣰ braille pattern u+28F0
+⣱ braille pattern u+28F1
+⣲ braille pattern u+28F2
+⣳ braille pattern u+28F3
+⣴ braille pattern u+28F4
+⣵ braille pattern u+28F5
+⣶ braille pattern u+28F6
+⣷ braille pattern u+28F7
+⣸ braille pattern u+28F8
+⣹ braille pattern u+28F9
+⣺ braille pattern u+28FA
+⣻ braille pattern u+28FB
+⣼ braille pattern u+28FC
+⣽ braille pattern u+28FD
+⣾ braille pattern u+28FE
+⣿ braille pattern u+28FF
+
+# Shapes
+● black circle
+○ white circle
+■ black square
+□ white square
+▲ black up triangle
+△ white up triangle
+▼ black down triangle
+▽ white down triangle
+◆ black diamond
+◇ white diamond
+★ black star
+☆ white star
+♥ heart suit
+♦ diamond suit
+♣ club suit
+♠ spade suit
+
+# Emoji
+😀 grinning face
+😁 beaming face
+😂 tears of joy
+🤣 rolling on floor laughing
+😊 smiling face
+😍 heart eyes
+😭 loudly crying face
+🤔 thinking face
+👍 thumbs up
+👎 thumbs down
+👏 clapping
+🙏 folded hands
+🔥 fire
+✨ sparkles
+⭐ star
+🌙 moon
+☀ sun
+🌍 globe
+💻 laptop
+📁 folder
+📄 page
+📌 pushpin
+🔒 locked
+🔓 unlocked
+🗑 wastebasket
+🐧 penguin
+🦀 crab
+🐍 snake
+🐱 cat
+❤️ red heart
+💙 blue heart
+💚 green heart
+💛 yellow heart
+🖤 black heart
