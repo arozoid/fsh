@@ -23,14 +23,14 @@ load_history() {
   if [[ -r $file ]]; then
     # bash: plain lines; zsh: ": unixtime:duration;command"
     mapfile -t lines < <(
-      tac "$file" 2>/dev/null \
-        | sed -E 's/^: [0-9]+:[0-9]+;//' \
-        | awk 'NF && !seen[$0]++'
+      LC_ALL=C tac "$file" 2>/dev/null \
+        | LC_ALL=C sed -E 's/^: [0-9]+:[0-9]+;//' \
+        | LC_ALL=C awk 'NF && !seen[$0]++'
     )
   elif [[ -n ${BASH_VERSION:-} ]]; then
     mapfile -t lines < <(
-      history | awk '{$1=""; sub(/^ /,""); if ($0 != "") print}' \
-        | tac | awk '!seen[$0]++'
+      LC_ALL=C history | LC_ALL=C awk '{$1=""; sub(/^ /,""); if ($0 != "") print}' \
+        | LC_ALL=C tac | LC_ALL=C awk '!seen[$0]++'
     )
   else
     die 'no readable history found'
