@@ -61,6 +61,7 @@ fsh_menu_defaults() {
 fsh_search_dirs() {
   local -a dirs=() seen=() d base
   for d in \
+    "$HOME/Downloads/fsh" \
     "$HOME/Documents/@project/fsh" \
     "$HOME/fsh" \
     "$HOME/Documents/fsh" \

@@ -171,11 +171,18 @@ pick_uninstall_target() {
 
 pick_action() {
   local -a actions=('Install')
-  fsh_has_local_install || fsh_has_global_install && actions+=('Uninstall')
+
+  if fsh_has_local_install || fsh_has_global_install; then
+    actions+=('Update')
+    actions+=('Upgrade')
+    actions+=('Uninstall')
+  fi
+
   actions+=('Quit')
+
   fsh_menu_defaults
   f_prompt='Manage fsh: '
-  f_height=6
+  f_height=7
   f_select "${actions[@]}"
 }
 
@@ -196,6 +203,97 @@ resolve_uninstall_target() {
   esac
 }
 
+update_local() {
+  fsh_has_local_install || die 'no local install at ~/fsh'
+
+  mkdir -p "$FSH_LOCAL_ROOT/lib"
+  cp -a "$DIR"/*.sh "$FSH_LOCAL_ROOT/"
+  cp -a "$DIR"/lib/* "$FSH_LOCAL_ROOT/lib/"
+  rm -f "$FSH_LOCAL_ROOT/install_f.sh"
+  chmod +x "$FSH_LOCAL_ROOT"/*.sh "$FSH_LOCAL_ROOT"/lib/*.sh
+
+  printf 'Updated local installation\n' >&2
+}
+
+update_global() {
+  fsh_has_global_install || die 'no global install at /fsh'
+
+  if [[ $EUID -ne 0 ]]; then
+    command -v sudo >/dev/null 2>&1 || die 'sudo required for system update'
+    sudo cp -a "$DIR"/*.sh /fsh/
+    sudo cp -a "$DIR"/lib/* /fsh/lib/
+    sudo rm -f /fsh/install_f.sh
+    sudo chmod +x /fsh/*.sh /fsh/lib/*.sh
+  else
+    cp -a "$DIR"/*.sh /fsh/
+    cp -a "$DIR"/lib/* /fsh/lib/
+    rm -f /fsh/install_f.sh
+    chmod +x /fsh/*.sh /fsh/lib/*.sh
+  fi
+
+  printf 'Updated global installation\n' >&2
+}
+
+update_both() {
+  fsh_has_local_install && update_local
+  fsh_has_global_install && update_global
+}
+
+pick_update_target() {
+  local -a choices=()
+
+  fsh_has_local_install && choices+=('Update local (~/fsh)')
+  fsh_has_global_install && choices+=('Update global (/fsh)')
+
+  if fsh_has_local_install && fsh_has_global_install; then
+    choices+=('Update both')
+  fi
+
+  ((${#choices[@]} > 0)) || die 'nothing installed'
+
+  fsh_menu_defaults
+  f_prompt='Update: '
+  f_height=6
+  f_select "${choices[@]}"
+}
+
+resolve_update_target() {
+  case "$1" in
+    'Update local (~/fsh)'|local|home|user)
+      update_local
+      ;;
+    'Update global (/fsh)'|global|system)
+      update_global
+      ;;
+    'Update both'|both)
+      update_both
+      ;;
+    *)
+      die "unknown update target: $1"
+      ;;
+  esac
+}
+
+upgrade() {
+  command -v git >/dev/null 2>&1 || die 'git is required for upgrade'
+
+  if git -C "$DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    printf 'Updating repository...\n' >&2
+    git -C "$DIR" pull --ff-only
+    "$DIR/manage_f.sh" update both
+    return
+  fi
+
+  local tmp
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' RETURN
+
+  printf 'Downloading latest fsh...\n' >&2
+  git clone --depth=1 https://github.com/arozoid/fsh.git "$tmp"
+
+  "$tmp/manage_f.sh" update both
+}
+
 main() {
   local action target
 
@@ -208,6 +306,21 @@ main() {
         *) resolve_install_target "$1" ;;
       esac
       ;;
+
+    update)
+      shift
+      case ${1:-} in
+        local|home|user) update_local ;;
+        global|system) update_global ;;
+        both|'') update_both ;;
+        *) resolve_update_target "$1" ;;
+      esac
+      ;;
+
+    upgrade)
+      upgrade
+      ;;
+
     uninstall)
       shift
       case ${1:-} in
@@ -218,25 +331,43 @@ main() {
           target=$(pick_uninstall_target) || exit 0
           resolve_uninstall_target "$target"
           ;;
-        *) resolve_uninstall_target "$1" ;;
+        *)
+          resolve_uninstall_target "$1"
+          ;;
       esac
       ;;
+
     '')
       action=$(pick_action) || exit 0
+
       case "$action" in
         Install)
           target=$(pick_install_target) || exit 0
           resolve_install_target "$target"
           ;;
+
+        Update)
+          target=$(pick_update_target) || exit 0
+          resolve_update_target "$target"
+          ;;
+
+        Upgrade)
+          upgrade
+          ;;
+
         Uninstall)
           target=$(pick_uninstall_target) || exit 0
           resolve_uninstall_target "$target"
           ;;
-        Quit) exit 0 ;;
+
+        Quit)
+          exit 0
+          ;;
       esac
       ;;
+
     *)
-      die "usage: manage_f.sh [install [local|global] | uninstall [local|global|both]]"
+      die "usage: manage_f.sh [install [local|global] | update [local|global|both] | upgrade | uninstall [local|global|both]]"
       ;;
   esac
 }
