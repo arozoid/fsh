@@ -63,11 +63,12 @@ reinstall to sync an existing copy:
 
 `run.sh` (or `fsh`) lists every top-level `*.sh` script from these paths — first match wins, no duplicates:
 
-1. `~/Documents/@project/fsh`
-2. `~/fsh`
-3. `~/Documents/fsh`
-4. `/fsh`
-5. the directory containing `run.sh`
+1. `~/Downloads/fsh`
+2. `~/Documents/fsh`
+3. `~/Documents/@project/fsh`
+4. `~/fsh`
+5. `/fsh`
+6. the directory containing `run.sh`
 
 ---
 
