@@ -241,6 +241,9 @@ f_init_terminal() {
   _f_have_awk=0
   command -v awk >/dev/null 2>&1 && _f_have_awk=1
 
+  _f_fuzzy=${f_fuzzy:-1}
+  _f_smart_priority=${f_smart_priority:-0}
+
   _f_tty_saved=$(stty -g <&${_F_FD_TTY_IN} 2>/dev/null) || _f_tty_saved=''
   _f_tty_set_raw
   bind 'set bind-tty-special-chars off' 2>/dev/null || true
@@ -356,7 +359,7 @@ _f_filter_row_score() {
     printf '%s\t%s\n' "$((base + 10000 - ${#pos}))" "$text"
     return
   fi
-  (($(_f_cfg_fuzzy))) || return
+  (($_f_fuzzy)) || return
   qi=0; score=0; prev=-2; consec=0
   for ((ti = 0; ti < ${#text_l} && qi < ${#query_l}; ti++)); do
     if [[ ${text_l:ti:1} == "${query_l:qi:1}" ]]; then
@@ -380,7 +383,7 @@ _f_filter_row_score() {
 }
 
 _f_filter_rows() {
-  local query=$1 fuzzy=$(_f_cfg_fuzzy) smart=$(_f_cfg_smart_priority)
+  local query=$1 fuzzy=$_f_fuzzy smart=$_f_smart_priority
 
   if ((_f_have_awk)); then
     case $_f_source_type in
@@ -388,8 +391,8 @@ _f_filter_rows() {
       dynamic) "$_f_dynamic_callback" "$query" ;;
       *)       printf '%s\n' "${_f_items[@]}" ;;
     esac | LC_ALL=C awk -v query="$query" -v fuzzy="$fuzzy" -v smart="$smart" '
-      function fuzzy_score(text, query,    tl, ql, tlen, qlen, ti, qi, score, prev, consec, bonus, p, c) {
-        tl = tolower(text); ql = tolower(query)
+      BEGIN { ql = tolower(query) }
+      function fuzzy_score(text, tl,    tlen, qlen, ti, qi, score, prev, consec, bonus, p, c) {
         tlen = length(tl); qlen = length(ql)
         qi = 1; score = 0; prev = -2; consec = 0
         for (ti = 1; ti <= tlen && qi <= qlen; ti++) {
@@ -411,8 +414,8 @@ _f_filter_rows() {
         return qi > qlen ? score * 10000 - length(text) : -1
       }
       {
-        text_l = tolower($0); query_l = tolower(query)
-        pos = index(text_l, query_l)
+        text_l = tolower($0)
+        pos = index(text_l, ql)
         has_sub = pos > 0
         sub_score = has_sub ? 10001 - pos : 0
         if (fuzzy == 0) {
@@ -423,7 +426,7 @@ _f_filter_rows() {
           print (smart == 1 ? 10000000 + sub_score : 2000000 + sub_score) "\t" $0
           next
         }
-        fz = fuzzy_score($0, query)
+        fz = fuzzy_score($0, text_l)
         if (fz >= 0) print fz "\t" $0
       }
     '
@@ -482,9 +485,9 @@ f_filter_items() {
 
   local rows=() row
   if ((_f_have_sort)); then
-    mapfile -t rows < <(_f_filter_rows "$_f_query" | sort -t $'\t' -k1,1nr)
+    mapfile -t rows < <(_f_filter_rows "$_f_query" | sort -t $'\t' -k1,1nr | head -n "$f_preview_count")
   else
-    mapfile -t rows < <(_f_filter_rows "$_f_query")
+    mapfile -t rows < <(_f_filter_rows "$_f_query" | head -n "$f_preview_count")
   fi
 
   for row in "${rows[@]}"; do
@@ -622,7 +625,7 @@ _f_highlight() {
     return
   fi
 
-  if ((!$(_f_cfg_fuzzy))) || _f_contains_ci "$text" "$query"; then
+  if ((!$_f_fuzzy)) || _f_contains_ci "$text" "$query"; then
     if pos=$(_f_sub_pos_ci "$text" "$query"); then
       end=$((pos + qlen))
       _f_last_string="${text:0:pos}${c_match}${text:pos:qlen}${c_reset}${c_normal}${text:end}${c_reset}"

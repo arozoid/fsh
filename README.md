@@ -75,7 +75,7 @@ reinstall to sync an existing copy:
 ## scripts
 
 * **run.sh:** launcher menu
-* **manage_f.sh:** install / uninstall fsh
+* **manage_f.sh:** install, uninstall, update scripts from working directory, or upgrade from GitHub
 * **wifi.sh:** wifi manager (`nmcli` or `wpa_cli`)
 * **p.sh:** search processes, kill, inspect, copy pid
 * **app.sh:** launch desktop apps from `.desktop` files

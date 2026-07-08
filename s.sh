@@ -18,17 +18,56 @@ SSH_HOST_FILES=(
   "$HOME/.ssh/known_hosts"
 )
 
+_ssh_hosts_from_history() {
+  local hist
+  for hist in "${HISTFILE:-}" "$HOME/.bash_history" "$HOME/.zsh_history" "$HOME/.history"; do
+    [[ -n $hist && -r $hist ]] || continue
+    awk '
+      {
+        # strip zsh timestamp prefix: ": 1234567890:0;cmd"
+        if ($0 ~ /^: [0-9]+:[0-9]+;/) sub(/^: [0-9]+:[0-9]+;/, "")
+        if ($1 != "ssh") next
+        for (i = 2; i <= NF; i++) {
+          arg = $i
+          if (arg ~ /^[-]/) {
+            if (arg == "-p" || arg == "-l" || arg == "-J" || arg == "-o") i++
+            continue
+          }
+          gsub(/^.*@/, "", arg)
+          gsub(/[^a-zA-Z0-9._-].*$/, "", arg)
+          if (arg ~ /[a-zA-Z]/ && arg !~ /^[0-9.]+$/) print arg
+          break
+        }
+      }
+    ' "$hist" 2>/dev/null
+  done
+}
+
 collect_hosts() {
   local file
   local -A seen=()
+  local -A user_map=()
+  local host_entry host user
 
+  # Build user map from SSH config
+  while IFS=' ' read -r host user; do
+    user_map[$host]=$user
+  done < <(awk '
+    /^[Hh][Oo][Ss][Tt][[:space:]]+/ {
+      if (host && user) print host " " user
+      host = $2; user = ""; next
+    }
+    /^[Uu][Ss][Ee][Rr][[:space:]]+/ { user = $2 }
+    END { if (host && user) print host " " user }
+  ' "$HOME/.ssh/config" 2>/dev/null || true)
+
+  # Extract hosts from config files
   for file in "${SSH_HOST_FILES[@]}"; do
     [[ -n $file && -r $file ]] || continue
     while IFS= read -r host; do
       [[ -n $host ]] || continue
       [[ -n ${seen[$host]:-} ]] && continue
       seen[$host]=1
-      printf '%s\n' "$host"
     done < <(awk '
       /^[[:space:]]*#/ { next }
       /^[Hh][Oo][Ss][Tt][[:space:]]+/ {
@@ -37,15 +76,35 @@ collect_hosts() {
         next
       }
       /^[^#[:space:]][^[:space:]]+/ {
-        if (FILENAME ~ /hosts$/) print $1
         if (FILENAME ~ /known_hosts$/) {
+          if ($1 ~ /^\|/) next
           host = $1
           gsub(/^\[|\]:[0-9]+$/, "", host)
           gsub(/,.*$/, "", host)
           if (host !~ /^[0-9.]+$/ && host !~ /^[0-9a-fA-F:]+$/ && host !~ /[*?]/) print host
+          next
         }
+        if (FILENAME ~ /hosts$/ && FILENAME !~ /known_hosts$/) print $1
       }
-    ' "$file" 2>/dev/null)
+    ' "$file" 2>/dev/null || true)
+  done
+
+  # Fallback: extract recently-used hosts from shell history
+  if ((${#seen[@]} == 0)); then
+    while IFS= read -r host; do
+      [[ -n $host ]] || continue
+      [[ -n ${seen[$host]:-} ]] && continue
+      seen[$host]=1
+    done < <(_ssh_hosts_from_history)
+  fi
+
+  # Final sort and dedup, with user resolution
+  for host in "${!seen[@]}"; do
+    if [[ -n ${user_map[$host]:-} ]]; then
+      printf '%s@%s\n' "${user_map[$host]}" "$host"
+    else
+      printf '%s\n' "$host"
+    fi
   done | sort -fu
 }
 
