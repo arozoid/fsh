@@ -85,6 +85,7 @@ reinstall to sync an existing copy:
 * **power.sh:** lock, suspend, logout, reboot, shutdown
 * **hist.sh:** fuzzy-pick shell history
 * **pkg.sh:** package helper (`apk`, `apt`, `dnf`, `pacman`)
+* **symbols.sh:** copy 40,000+ emojis unicode symbols
 
 ---
 
@@ -119,65 +120,6 @@ config vars (set before `f_select`):
 | `f_search_delay` | `100` | milliseconds to wait after last keystroke before searching — debounces fast typing |
 | `f_color_*`, `f_reset` | ansi escapes | colors for each ui element |
 
-### `f_fuzzy` modes
-
-| value | behaviour |
-|-------|-----------|
-| `1` (default) | fuzzy matching — items matching any subsequence of the query are included; substring hits are ranked higher |
-| `0` | substring-only — only items that contain the exact query string (case-insensitive) are shown |
-
-### `f_smart_priority` (requires `f_fuzzy=1`)
-
-When set to `1`, scoring switches to a strict two-tier model:
-
-* **Tier 1** — items that also pass the normal substring search are scored `10 000 000 + sub_score` (early match position → higher score within tier).
-* **Tier 2** — fuzzy-only matches keep their raw fuzzy score.
-
-Tier-1 items always appear above tier-2 items regardless of how high a fuzzy score might be, making the list feel more "expected" when the query has obvious substring matches scattered among many fuzzy hits.
-
-```bash
-fsh_menu_defaults
-f_fuzzy=1
-f_smart_priority=1
-choice=$(f_select "${items[@]}") || exit 1
-```
-
-`fsh_menu_defaults` resets `f_smart_priority` to `0` on every call, so enabling it for one menu never bleeds into the next.
-
-### `f_min_query_length`
-
-when set to `2` or higher, the menu stays empty until the query reaches that many characters. no data is loaded from file or dynamic providers until the threshold is met. useful for very large lists where showing everything upfront is wasteful.
-
-the status bar shows a live counter — `type at least 2 chars (1/2)` — so the user knows how much more to type.
-
-```bash
-fsh_menu_defaults
-f_min_query_length=2
-choice=$(f_select_file symbols.txt) || exit 1
-```
-
-### `f_search_delay`
-
-search is delayed `f_search_delay` milliseconds after the last keystroke, so fast typing doesn't fire a new search on every character. when the user pauses, only the final query is sent.
-
-the timer resets on every keystroke (including backspace). old async searches are cancelled when a new one starts — only the latest query runs.
-
-a value of `0` removes the delay entirely (search fires on the next poll cycle, ~30ms).
-
-### fd allocation
-
-`f_init_terminal` uses `exec {var}</dev/tty` (bash 4.1+ auto-allocation, picks fd ≥ 10) with a fallback to explicit fds 10–14. This avoids conflicts with bash's internal script-reading fd, which lives in the 0–9 range — particularly important when a script is launched as a subprocess with only fds 0–2 inherited.
-
-keys: `↑` `↓` to move, type to filter, enter to select, esc to cancel.
-
-When a search is still loading on larger lists, the prompt stays live so you can keep typing; the status line shows `searching…` until the latest results are ready.
-
-demo:
-
-```bash
-bash lib/f.sh
-```
-
 ### alternate data sources
 
 entry points for large lists that stay off the shell heap or stream results from a provider:
@@ -207,3 +149,9 @@ choice=$(f_select_dynamic my_provider) || exit 1
 ```
 
 these add-ons keep the renderer independent of where items originate and avoid copying large files into bash arrays.
+
+demo:
+
+```bash
+bash lib/f.sh
+```
