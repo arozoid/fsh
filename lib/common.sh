@@ -7,6 +7,13 @@ FSH_SCRIPT_NAME=fsh
 FSH_SCRIPT_PATHS=()
 FSH_SCRIPT_LABELS=()
 
+# Detect Termux environment.
+_fsh_in_termux() {
+  [[ -n ${PREFIX:-} && $PREFIX == /data/data/com.termux* ]]
+}
+
+FSH_TERMUX_ROOT=/data/data/com.termux/files/home/fsh
+
 # Load menu library once so f_* defaults exist before callers use set -u.
 # shellcheck source=lib/f.sh
 source "$FSH_LIB_DIR/f.sh"
@@ -49,6 +56,8 @@ fsh_menu_defaults() {
   f_status=1
   f_min_query_length=0
   f_search_delay=250
+  f_preview_count=300
+  f_no_search=0
   f_color_prompt=$'\033[1;35m'
   f_color_query=$'\033[1;37m'
   f_color_normal=$'\033[0m'
@@ -68,6 +77,7 @@ fsh_search_dirs() {
     "$HOME/fsh" \
     "$HOME/Documents/fsh" \
     /fsh \
+    /data/data/com.termux/files/home/fsh \
     "$FSH_DIR"; do
     [[ -d $d ]] || continue
     base=$(cd "$d" && pwd)
@@ -151,4 +161,21 @@ fsh_has_global_install() {
   [[ -d /fsh/lib && -f /fsh/run.sh ]]
 }
 
+fsh_has_termux_install() {
+  [[ -d $FSH_TERMUX_ROOT/lib && -f $FSH_TERMUX_ROOT/run.sh ]]
+}
+
 fsh_alias_marker='# fsh alias (manage_f.sh)'
+
+# Copy stdin to system clipboard, die if no tool found.
+fsh_clipboard() {
+  if command -v wl-copy >/dev/null 2>&1; then
+    wl-copy
+  elif command -v xclip >/dev/null 2>&1; then
+    xclip -selection clipboard
+  elif command -v xsel >/dev/null 2>&1; then
+    xsel --clipboard --input
+  else
+    die 'no clipboard tool (wl-copy, xclip, xsel)'
+  fi
+}

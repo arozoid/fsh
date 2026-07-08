@@ -42,17 +42,6 @@ pick_action() {
   f_select "${actions[@]}"
 }
 
-pick_device() {
-  local -a devices=("$@")
-  ((${#devices[@]} > 0)) || die 'no devices found'
-
-  fsh_menu_defaults
-  f_prompt='Device: '
-  f_height=12
-  f_border=1
-  f_select "${devices[@]}"
-}
-
 device_mac() {
   printf '%s' "$1" | awk '{print $1}'
 }
@@ -72,16 +61,24 @@ connect_device() {
 
 connect_flow() {
   local do_scan=$1
-  local -a devices=()
+  local tmpfile choice
 
   if ((do_scan)); then
     scan_devices
   fi
 
-  mapfile -t devices < <(list_devices)
-  ((${#devices[@]} > 0)) || die 'no devices found — try Scan and connect'
+  tmpfile=$(mktemp) || return 1
+  list_devices >"$tmpfile"
+  (($(wc -l <"$tmpfile") > 0)) || { rm -f "$tmpfile"; die 'no devices found — try Scan and connect'; }
 
-  connect_device "$(pick_device "${devices[@]}")"
+  fsh_menu_defaults
+  f_prompt='Device: '
+  f_height=12
+  f_border=1
+  choice=$(f_select_file "$tmpfile") || { rm -f "$tmpfile"; return 1; }
+  rm -f "$tmpfile"
+
+  connect_device "$choice"
 }
 
 main() {

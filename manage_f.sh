@@ -23,6 +23,7 @@ fsh_init manage_f.sh
 
 FSH_LOCAL_ROOT=$HOME/fsh
 FSH_GLOBAL_ROOT=/fsh
+FSH_TERMUX_ROOT=/data/data/com.termux/files/home/fsh
 FSH_LOCAL_BIN=$HOME/bin/fsh
 FSH_GLOBAL_BIN=/bin/fsh
 
@@ -102,6 +103,20 @@ install_local() {
   printf 'Use: fsh   (alias) or %s   (if ~/bin is in PATH)\n' "$FSH_LOCAL_BIN" >&2
 }
 
+install_termux() {
+  local termux_bin=$PREFIX/bin/fsh
+  mkdir -p "$FSH_TERMUX_ROOT/lib"
+  cp -a "$DIR"/*.sh "$FSH_TERMUX_ROOT/"
+  cp -a "$DIR"/lib/* "$FSH_TERMUX_ROOT/lib/"
+  rm -f "$FSH_TERMUX_ROOT/install_f.sh"
+  chmod +x "$FSH_TERMUX_ROOT"/*.sh "$FSH_TERMUX_ROOT"/lib/*.sh
+  mkdir -p "$(dirname "$termux_bin")"
+  ln -sf "$FSH_TERMUX_ROOT/run.sh" "$termux_bin"
+  printf 'Installed to %s\n' "$FSH_TERMUX_ROOT" >&2
+  printf 'Symlink: %s → run.sh\n' "$termux_bin" >&2
+  printf 'Use: fsh\n' >&2
+}
+
 install_global() {
   _install_global_files() {
     mkdir -p /fsh/lib
@@ -141,24 +156,34 @@ uninstall_global() {
   printf 'Uninstalled global fsh\n' >&2
 }
 
+uninstall_termux() {
+  fsh_has_termux_install || die 'no termux install'
+  local termux_bin=$PREFIX/bin/fsh
+  rm -rf "$FSH_TERMUX_ROOT"
+  [[ -f $termux_bin || -L $termux_bin ]] && rm -f "$termux_bin"
+  printf 'Uninstalled termux fsh\n' >&2
+}
+
 uninstall_both() {
   fsh_has_local_install && uninstall_local
   fsh_has_global_install && uninstall_global
+  _fsh_in_termux && fsh_has_termux_install && uninstall_termux
 }
 
 pick_install_target() {
+  local -a targets=("$FSH_LOCAL_ROOT (local)" "$FSH_GLOBAL_ROOT (system)")
+  _fsh_in_termux && targets+=("$FSH_TERMUX_ROOT (termux)")
   fsh_menu_defaults
   f_prompt='Install to: '
   f_height=6
-  f_select \
-    "$FSH_LOCAL_ROOT (local)" \
-    "$FSH_GLOBAL_ROOT (system)"
+  f_select "${targets[@]}"
 }
 
 pick_uninstall_target() {
   local -a choices=()
   fsh_has_local_install && choices+=('Uninstall local (~/fsh)')
   fsh_has_global_install && choices+=('Uninstall global (/fsh)')
+  _fsh_in_termux && fsh_has_termux_install && choices+=('Uninstall termux')
   if fsh_has_local_install && fsh_has_global_install; then
     choices+=('Uninstall both')
   fi
@@ -190,6 +215,7 @@ resolve_install_target() {
   case "$1" in
     *'(system)'*|/fsh|system) install_global ;;
     *'(local)'*|~|home|user) install_local ;;
+    *'(termux)'*|termux) install_termux ;;
     *) die "unknown install target: $1" ;;
   esac
 }
@@ -198,6 +224,7 @@ resolve_uninstall_target() {
   case "$1" in
     'Uninstall local (~/fsh)'|local) uninstall_local ;;
     'Uninstall global (/fsh)'|global) uninstall_global ;;
+    'Uninstall termux'|termux) uninstall_termux ;;
     'Uninstall both'|both) uninstall_both ;;
     *) die "unknown uninstall target: $1" ;;
   esac
@@ -213,6 +240,16 @@ update_local() {
   chmod +x "$FSH_LOCAL_ROOT"/*.sh "$FSH_LOCAL_ROOT"/lib/*.sh
 
   printf 'Updated local installation\n' >&2
+}
+
+update_termux() {
+  fsh_has_termux_install || die 'no termux install'
+  mkdir -p "$FSH_TERMUX_ROOT/lib"
+  cp -a "$DIR"/*.sh "$FSH_TERMUX_ROOT/"
+  cp -a "$DIR"/lib/* "$FSH_TERMUX_ROOT/lib/"
+  rm -f "$FSH_TERMUX_ROOT/install_f.sh"
+  chmod +x "$FSH_TERMUX_ROOT"/*.sh "$FSH_TERMUX_ROOT"/lib/*.sh
+  printf 'Updated termux installation\n' >&2
 }
 
 update_global() {
@@ -237,6 +274,7 @@ update_global() {
 update_both() {
   fsh_has_local_install && update_local
   fsh_has_global_install && update_global
+  _fsh_in_termux && fsh_has_termux_install && update_termux
 }
 
 pick_update_target() {
@@ -244,6 +282,7 @@ pick_update_target() {
 
   fsh_has_local_install && choices+=('Update local (~/fsh)')
   fsh_has_global_install && choices+=('Update global (/fsh)')
+  _fsh_in_termux && fsh_has_termux_install && choices+=('Update termux')
 
   if fsh_has_local_install && fsh_has_global_install; then
     choices+=('Update both')
@@ -264,6 +303,9 @@ resolve_update_target() {
       ;;
     'Update global (/fsh)'|global|system)
       update_global
+      ;;
+    'Update termux'|termux)
+      update_termux
       ;;
     'Update both'|both)
       update_both
@@ -303,6 +345,7 @@ main() {
       case ${1:-} in
         local|home|user|'') install_local ;;
         global|system|/) install_global ;;
+        termux) install_termux ;;
         *) resolve_install_target "$1" ;;
       esac
       ;;
@@ -312,6 +355,7 @@ main() {
       case ${1:-} in
         local|home|user) update_local ;;
         global|system) update_global ;;
+        termux) update_termux ;;
         both|'') update_both ;;
         *) resolve_update_target "$1" ;;
       esac
@@ -326,6 +370,7 @@ main() {
       case ${1:-} in
         local|home) uninstall_local ;;
         global|system) uninstall_global ;;
+        termux) uninstall_termux ;;
         both) uninstall_both ;;
         '')
           target=$(pick_uninstall_target) || exit 0
@@ -367,7 +412,7 @@ main() {
       ;;
 
     *)
-      die "usage: manage_f.sh [install [local|global] | update [local|global|both] | upgrade | uninstall [local|global|both]]"
+      die "usage: manage_f.sh [install [local|global|termux] | update [local|global|termux|both] | upgrade | uninstall [local|global|termux|both]]"
       ;;
   esac
 }

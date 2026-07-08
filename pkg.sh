@@ -165,7 +165,11 @@ main() {
         pkg_upgrade
         ;;
       'List installed')
-        pkg_installed | "${PAGER:-less -R}"
+        fsh_menu_defaults
+        f_prompt='Installed: '
+        f_height=15
+        f_border=1
+        f_select_dynamic _f_pkg_installed_provider >/dev/null || true
         ;;
       'Quit')
         exit 0

@@ -81,10 +81,13 @@ reinstall to sync an existing copy:
 * **app.sh:** launch desktop apps from `.desktop` files
 * **s.sh:** pick ssh hosts from config
 * **bt.sh:** bluetooth picker (`bluetoothctl`)
+* **calc.sh:** interactive calculator with session history (`bc -l` / `qalc`)
+* **cd.sh:** interactive directory navigator — outputs `cd /path` so you can `eval "$(cd.sh)"`
+* **clip.sh:** clipboard history — saves and browses clipboard entries
 * **ss.sh:** screenshots (`grim` + `slurp`)
 * **power.sh:** lock, suspend, logout, reboot, shutdown
 * **hist.sh:** fuzzy-pick shell history
-* **pkg.sh:** package helper (`apk`, `apt`, `dnf`, `pacman`)
+* **pkg.sh:** package helper — search & install, remove, list installed, upgrade (`apk`, `apt`, `dnf`, `pacman`)
 * **symbols.sh:** copy 40,000+ emojis unicode symbols
 
 ---
@@ -117,7 +120,9 @@ config vars (set before `f_select`):
 | `f_marker` | `1` | `0` hides the `▸` cursor marker |
 | `f_status` | `1` | `0` hides the match count / scroll info |
 | `f_min_query_length` | `0` | minimum characters before filtering starts (see below) |
-| `f_search_delay` | `100` | milliseconds to wait after last keystroke before searching — debounces fast typing |
+| `f_search_delay` | `250` | milliseconds to wait after last keystroke before searching — debounces fast typing |
+| `f_preview_count` | `300` | items shown when query is empty or below `f_min_query_length` (file/dynamic modes cap at this; array mode shows all) |
+| `f_no_search` | `0` | `1` to show all items without filtering — query is still captured for scripts to use |
 | `f_color_*`, `f_reset` | ansi escapes | colors for each ui element |
 
 ### `f_color_*` and `f_reset`

@@ -11,6 +11,8 @@ f_marker=1
 f_status=1
 f_min_query_length=0
 f_search_delay=100
+f_preview_count=300
+f_no_search=0
 
 f_color_prompt=$'\033[1;35m'
 f_color_query=$'\033[1;37m'
@@ -448,14 +450,30 @@ f_filter_items() {
   local -a _f_new_filtered=()
 
   if ((f_min_query_length > 0 && ${#_f_query} < f_min_query_length)); then
-    _f_filtered=()
+    case $_f_source_type in
+      file)     mapfile -t _f_new_filtered < <(head -n "$f_preview_count" "$_f_items_file") ;;
+      dynamic)  mapfile -t _f_new_filtered < <("$_f_dynamic_callback" "" | head -n "$f_preview_count") ;;
+      *)        _f_new_filtered=("${_f_items[@]}")
+                ((${#_f_new_filtered[@]} > f_preview_count)) && _f_new_filtered=("${_f_new_filtered[@]:0:f_preview_count}") ;;
+    esac
+    _f_filtered=("${_f_new_filtered[@]}")
+    return
+  fi
+
+  if ((f_no_search)); then
+    case $_f_source_type in
+      file)     mapfile -t _f_new_filtered < "$_f_items_file" ;;
+      dynamic)  mapfile -t _f_new_filtered < <("$_f_dynamic_callback" "$_f_query") ;;
+      *)        _f_new_filtered=("${_f_items[@]}") ;;
+    esac
+    _f_filtered=("${_f_new_filtered[@]}")
     return
   fi
 
   if [[ -z $_f_query ]]; then
     case $_f_source_type in
-      file)     mapfile -t _f_new_filtered < "$_f_items_file" ;;
-      dynamic)  mapfile -t _f_new_filtered < <("$_f_dynamic_callback" "") ;;
+      file)     mapfile -t _f_new_filtered < <(head -n "$f_preview_count" "$_f_items_file") ;;
+      dynamic)  mapfile -t _f_new_filtered < <("$_f_dynamic_callback" "" | head -n "$f_preview_count") ;;
       *)        _f_new_filtered=("${_f_items[@]}") ;;
     esac
     _f_filtered=("${_f_new_filtered[@]}")
@@ -731,8 +749,12 @@ _f_build_rows() {
       item=${_f_filtered[idx]}
       _f_plain_truncate "$item" "$inner"
       plain=$_f_last_string
-      _f_highlight "$_f_query" "$plain"
-      rendered=$_f_last_string
+      if ((f_no_search)); then
+        rendered=$plain
+      else
+        _f_highlight "$_f_query" "$plain"
+        rendered=$_f_last_string
+      fi
       if ((idx == _f_cursor)); then
         line+="${c_selected}${rendered}${c_reset}"
       else
@@ -755,10 +777,12 @@ _f_build_rows() {
         status_text='searching...'
       elif ((f_min_query_length > 0 && ${#_f_query} < f_min_query_length)); then
         if ((${#_f_query} == 0)); then
-          status_text="type at least $f_min_query_length chars"
+          status_text="type at least $f_min_query_length chars · $total item$([[ $total -eq 1 ]] || echo s)"
         else
-          status_text="type at least $f_min_query_length chars (${#_f_query}/$f_min_query_length)"
+          status_text="type at least $f_min_query_length chars (${#_f_query}/$f_min_query_length) · $total item$([[ $total -eq 1 ]] || echo s)"
         fi
+      elif ((f_no_search)); then
+        status_text="$total item$([[ $total -eq 1 ]] || echo s)"
       elif ((${#_f_query} > 0)); then
         if ((total == 0)); then status_text='no matches'; else status_text="$((_f_cursor + 1))/$total"; fi
       else

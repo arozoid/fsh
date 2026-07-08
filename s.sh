@@ -15,6 +15,7 @@ SSH_HOST_FILES=(
   "$HOME/.ssh/hosts"
   "$HOME/.ssh/config"
   /etc/ssh/ssh_config
+  "$HOME/.ssh/known_hosts"
 )
 
 collect_hosts() {
@@ -37,6 +38,12 @@ collect_hosts() {
       }
       /^[^#[:space:]][^[:space:]]+/ {
         if (FILENAME ~ /hosts$/) print $1
+        if (FILENAME ~ /known_hosts$/) {
+          host = $1
+          gsub(/^\[|\]:[0-9]+$/, "", host)
+          gsub(/,.*$/, "", host)
+          if (host !~ /^[0-9.]+$/ && host !~ /^[0-9a-fA-F:]+$/ && host !~ /[*?]/) print host
+        }
       }
     ' "$file" 2>/dev/null)
   done | sort -fu
@@ -61,15 +68,19 @@ host_label() {
 }
 
 pick_host() {
-  local -a hosts=()
-  mapfile -t hosts < <(collect_hosts)
-  ((${#hosts[@]} > 0)) || die 'no SSH hosts found (~/.ssh/config, ~/.ssh/hosts)'
+  local tmpfile
+  tmpfile=$(mktemp) || return 1
+  collect_hosts >"$tmpfile"
+  [[ -s $tmpfile ]] || { rm -f "$tmpfile"; die 'no SSH hosts found (~/.ssh/config, ~/.ssh/hosts, ~/.ssh/known_hosts)'; }
 
   fsh_menu_defaults
   f_prompt='SSH host: '
   f_height=15
   f_border=1
-  f_select "${hosts[@]}"
+  f_select_file "$tmpfile"
+  local rc=$?
+  rm -f "$tmpfile"
+  return "$rc"
 }
 
 connect_host() {

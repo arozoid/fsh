@@ -254,17 +254,19 @@ pick_action() {
 }
 
 pick_network() {
-  local -a networks=('↻ Refresh scan')
-  local choice
+  local tmpfile choice
+  tmpfile=$(mktemp) || return 1
 
-  mapfile -t -O 1 networks < <(scan_networks)
-  ((${#networks[@]} > 1)) || die 'no networks found'
+  printf '↻ Refresh scan\n' >"$tmpfile"
+  scan_networks >>"$tmpfile"
+  (($(wc -l <"$tmpfile") > 1)) || { rm -f "$tmpfile"; die 'no networks found'; }
 
   fsh_menu_defaults
   f_prompt="SSID ($IFACE): "
   f_height=12
   f_border=1
-  choice=$(f_select "${networks[@]}") || return 1
+  choice=$(f_select_file "$tmpfile") || { rm -f "$tmpfile"; return 1; }
+  rm -f "$tmpfile"
 
   if [[ $choice == '↻ Refresh scan' ]]; then
     printf 'Scanning…\n' >&2
