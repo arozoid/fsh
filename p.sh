@@ -58,17 +58,18 @@ copy_text() {
   printf 'copied: %s\n' "$text" >&2
 }
 
-pick_process() {
-  _f_items=()
-  mapfile -t _f_items < <(list_processes)
-  ((${#_f_items[@]} > 0)) || die 'no processes found'
+_f_process_provider() {
+  list_processes
+}
 
+pick_process() {
   fsh_menu_defaults
+  f_min_query_length=2
   f_prompt='process: '
   f_height=15
   f_border=1
   f_fuzzy=0
-  f_select
+  f_select_dynamic _f_process_provider
 }
 
 do_action() {

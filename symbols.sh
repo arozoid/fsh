@@ -11,10 +11,10 @@ SYMBOLS_FILE="$DIR/symbols.txt"
 
 [[ -f $SYMBOLS_FILE ]] || die "symbols database not found: $SYMBOLS_FILE"
 
-mapfile -t symbols <"$SYMBOLS_FILE"
-
+f_min_query_length=2
 f_prompt='Unicode: '
-choice=$(f_select "${symbols[@]}") || exit 0
+f_fuzzy=0
+choice=$(f_select_file "$SYMBOLS_FILE") || exit 0
 
 symbol=${choice%% *}
 

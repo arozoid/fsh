@@ -47,6 +47,8 @@ fsh_menu_defaults() {
   f_hints=1
   f_marker=1
   f_status=1
+  f_min_query_length=0
+  f_search_delay=250
   f_color_prompt=$'\033[1;35m'
   f_color_query=$'\033[1;37m'
   f_color_normal=$'\033[0m'

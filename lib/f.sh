@@ -9,6 +9,8 @@ f_smart_priority=0
 f_hints=1
 f_marker=1
 f_status=1
+f_min_query_length=0
+f_search_delay=100
 
 f_color_prompt=$'\033[1;35m'
 f_color_query=$'\033[1;37m'
@@ -55,6 +57,13 @@ _f_filter_file=''
 _f_filter_pending=0
 _f_filter_async_threshold=256
 _f_filter_stale_pids=()
+
+_f_search_pending_query=''
+_f_search_pending_at=0
+
+_f_source_type="array"      # array | file | dynamic
+_f_items_file=""
+_f_dynamic_callback=""
 
 _f_prev_rows=()
 _f_prev_row_nums=()
@@ -115,6 +124,10 @@ _f_repeat() {
     out+=$char
   done
   printf '%s' "$out"
+}
+
+_f_now_ms() {
+  date +%s%3N 2>/dev/null || printf '%d000' "$(date +%s)"
 }
 
 _f_update_dimensions() {
@@ -324,11 +337,55 @@ _f_on_signal() {
   f_restore_terminal
 }
 
+_f_filter_row_score() {
+  local text=$1 query_l=$2 fuzzy=$3 smart=$4
+  local text_l pos qi ti score prev consec bonus c prev_c
+  text_l=${text,,}
+  if [[ ${text_l//"$query_l"/} != "$text_l" ]]; then
+    pos=${text_l%%"$query_l"*}
+    local base=0
+    if ((fuzzy == 1)); then
+      if ((smart == 1)); then
+        base=10000000
+      else
+        base=2000000
+      fi
+    fi
+    printf '%s\t%s\n' "$((base + 10000 - ${#pos}))" "$text"
+    return
+  fi
+  (($(_f_cfg_fuzzy))) || return
+  qi=0; score=0; prev=-2; consec=0
+  for ((ti = 0; ti < ${#text_l} && qi < ${#query_l}; ti++)); do
+    if [[ ${text_l:ti:1} == "${query_l:qi:1}" ]]; then
+      bonus=0
+      if ((prev == ti - 1)); then
+        ((consec++)); ((bonus += 2 + consec))
+      else
+        consec=0
+      fi
+      ((ti == 0)) && ((bonus += 3))
+      if ((ti > 0)); then
+        c=${text_l:ti-1:1}
+        case $c in '/'|'-'|'_'|'.'|' '|$'\t') ((bonus += 4)) ;; esac
+        prev_c=${text:ti-1:1}; c=${text:ti:1}
+        [[ $prev_c =~ [a-z] && $c =~ [A-Z] ]] && ((bonus += 3))
+      fi
+      ((score += 1 + bonus)); prev=$ti; ((qi++))
+    fi
+  done
+  ((qi == ${#query_l})) && printf '%s\t%s\n' "$((score * 10000 - ${#text}))" "$text"
+}
+
 _f_filter_rows() {
   local query=$1 fuzzy=$(_f_cfg_fuzzy) smart=$(_f_cfg_smart_priority)
 
   if ((_f_have_awk)); then
-    printf '%s\n' "${_f_items[@]}" | LC_ALL=C awk -v query="$query" -v fuzzy="$fuzzy" -v smart="$smart" '
+    case $_f_source_type in
+      file)    cat "$_f_items_file" ;;
+      dynamic) "$_f_dynamic_callback" "$query" ;;
+      *)       printf '%s\n' "${_f_items[@]}" ;;
+    esac | LC_ALL=C awk -v query="$query" -v fuzzy="$fuzzy" -v smart="$smart" '
       function fuzzy_score(text, query,    tl, ql, tlen, qlen, ti, qi, score, prev, consec, bonus, p, c) {
         tl = tolower(text); ql = tolower(query)
         tlen = length(tl); qlen = length(ql)
@@ -352,94 +409,72 @@ _f_filter_rows() {
         return qi > qlen ? score * 10000 - length(text) : -1
       }
       {
-        idx = NR - 1
-        if (query == "") { print "0\t" idx; next }
         text_l = tolower($0); query_l = tolower(query)
         pos = index(text_l, query_l)
         has_sub = pos > 0
         sub_score = has_sub ? 10001 - pos : 0
         if (fuzzy == 0) {
-          if (has_sub) print sub_score "\t" idx
+          if (has_sub) print sub_score "\t" $0
           next
         }
         if (has_sub) {
-          print (smart == 1 ? 10000000 + sub_score : 2000000 + sub_score) "\t" idx
+          print (smart == 1 ? 10000000 + sub_score : 2000000 + sub_score) "\t" $0
           next
         }
         fz = fuzzy_score($0, query)
-        if (fz >= 0) print fz "\t" idx
+        if (fz >= 0) print fz "\t" $0
       }
     '
     return
   fi
 
-  local idx text text_l query_l pos qi ti score prev consec bonus c prev_c
-  query_l=${query,,}
-  for idx in "${!_f_items[@]}"; do
-    text=${_f_items[idx]}
-    text_l=${text,,}
-    if [[ -z $query_l ]]; then
-      printf '0\t%s\n' "$idx"
-      continue
-    fi
-    if [[ ${text_l//"$query_l"/} != "$text_l" ]]; then
-      pos=${text_l%%"$query_l"*}
-      local base=0
-      if ((fuzzy == 1)); then
-        if ((smart == 1)); then
-          base=10000000
-        else
-          base=2000000
-        fi
-      fi
-      printf '%s\t%s\n' "$((base + 10000 - ${#pos}))" "$idx"
-      continue
-    fi
-    (($(_f_cfg_fuzzy))) || continue
-    qi=0; score=0; prev=-2; consec=0
-    for ((ti = 0; ti < ${#text_l} && qi < ${#query_l}; ti++)); do
-      if [[ ${text_l:ti:1} == "${query_l:qi:1}" ]]; then
-        bonus=0
-        if ((prev == ti - 1)); then
-          ((consec++)); ((bonus += 2 + consec))
-        else
-          consec=0
-        fi
-        ((ti == 0)) && ((bonus += 3))
-        if ((ti > 0)); then
-          c=${text_l:ti-1:1}
-          case $c in '/'|'-'|'_'|'.'|' '|$'\t') ((bonus += 4)) ;; esac
-          prev_c=${text:ti-1:1}; c=${text:ti:1}
-          [[ $prev_c =~ [a-z] && $c =~ [A-Z] ]] && ((bonus += 3))
-        fi
-        ((score += 1 + bonus)); prev=$ti; ((qi++))
-      fi
+  local text query_l=${query,,}
+  if [[ $_f_source_type == "file" ]]; then
+    while IFS= read -r text; do
+      _f_filter_row_score "$text" "$query_l" "$fuzzy" "$smart"
+    done < "$_f_items_file"
+  elif [[ $_f_source_type == "dynamic" ]]; then
+    while IFS= read -r text; do
+      _f_filter_row_score "$text" "$query_l" "$fuzzy" "$smart"
+    done < <("$_f_dynamic_callback" "$query")
+  else
+    for text in "${_f_items[@]}"; do
+      _f_filter_row_score "$text" "$query_l" "$fuzzy" "$smart"
     done
-    ((qi == ${#query_l})) && printf '%s\t%s\n' "$((score * 10000 - ${#text}))" "$idx"
-  done
+  fi
 }
 
 f_filter_items() {
-  _f_filtered=()
+  local -a _f_new_filtered=()
 
-  local rows=() row score idx i
-  if [[ -z $_f_query ]]; then
-    for ((i = 0; i < ${#_f_items[@]}; i++)); do
-      _f_filtered+=("$i")
-    done
+  if ((f_min_query_length > 0 && ${#_f_query} < f_min_query_length)); then
+    _f_filtered=()
     return
   fi
 
+  if [[ -z $_f_query ]]; then
+    case $_f_source_type in
+      file)     mapfile -t _f_new_filtered < "$_f_items_file" ;;
+      dynamic)  mapfile -t _f_new_filtered < <("$_f_dynamic_callback" "") ;;
+      *)        _f_new_filtered=("${_f_items[@]}") ;;
+    esac
+    _f_filtered=("${_f_new_filtered[@]}")
+    return
+  fi
+
+  local rows=() row
   if ((_f_have_sort)); then
-    mapfile -t rows < <(_f_filter_rows "$_f_query" | sort -t $'\t' -k1,1nr -k2,2n)
+    mapfile -t rows < <(_f_filter_rows "$_f_query" | sort -t $'\t' -k1,1nr)
   else
     mapfile -t rows < <(_f_filter_rows "$_f_query")
   fi
 
   for row in "${rows[@]}"; do
-    IFS=$'\t' read -r score idx <<<"$row"
-    [[ $idx =~ ^[0-9]+$ ]] && _f_filtered+=("$idx")
+    [[ $row == *$'\t'* ]] || continue
+    _f_new_filtered+=("${row#*$'\t'}")
   done
+
+  _f_filtered=("${_f_new_filtered[@]}")
 }
 
 _f_filter_ensure_tmpdir() {
@@ -498,14 +533,13 @@ _f_filter_request() {
     _f_filter_pid=''
   fi
 
-  if [[ -z $query || ${#_f_items[@]} -le $_f_filter_async_threshold ]]; then
+  if [[ $_f_source_type != "array" || -z $query || ${#_f_items[@]} -le $_f_filter_async_threshold ]]; then
     f_filter_items
     _f_filter_ready_seq=$_f_filter_seq
     _f_filter_pending=0
     return
   fi
 
-  _f_filtered=()
   _f_filter_start_async "$_f_filter_seq" "$query" || {
     f_filter_items
     _f_filter_ready_seq=$_f_filter_seq
@@ -652,7 +686,7 @@ _f_border_line() {
 
 _f_build_rows() {
   local total=${#_f_filtered[@]} border=$(_f_cfg_border) marker=$(_f_cfg_marker)
-  local row=$_f_start_row r idx item_idx item plain rendered prefix line
+  local row=$_f_start_row r idx item plain rendered prefix line
   local prefix_w inner scroll_up=0 scroll_down=0
   local c_border=${f_color_border:-$'\033[90m'} c_reset=${f_reset:-$'\033[0m'}
   local c_normal=${f_color_normal:-$'\033[0m'} c_selected=${f_color_selected:-$'\033[7m'}
@@ -694,8 +728,7 @@ _f_build_rows() {
     idx=$((_f_scroll + r))
     line=$prefix
     if ((idx < total)); then
-      item_idx=${_f_filtered[idx]}
-      item=${_f_items[item_idx]}
+      item=${_f_filtered[idx]}
       _f_plain_truncate "$item" "$inner"
       plain=$_f_last_string
       _f_highlight "$_f_query" "$plain"
@@ -720,6 +753,12 @@ _f_build_rows() {
     if (($(_f_cfg_status))); then
       if ((_f_filter_pending)); then
         status_text='searching...'
+      elif ((f_min_query_length > 0 && ${#_f_query} < f_min_query_length)); then
+        if ((${#_f_query} == 0)); then
+          status_text="type at least $f_min_query_length chars"
+        else
+          status_text="type at least $f_min_query_length chars (${#_f_query}/$f_min_query_length)"
+        fi
       elif ((${#_f_query} > 0)); then
         if ((total == 0)); then status_text='no matches'; else status_text="$((_f_cursor + 1))/$total"; fi
       else
@@ -893,10 +932,37 @@ f_read_key() {
   return 0
 }
 
+f_select_file() {
+  [[ $# -eq 1 ]] || { printf 'f.sh: f_select_file: exactly 1 argument expected, got %d\n' "$#" >&2; return 1; }
+  [[ -f $1 ]] || { printf 'f.sh: f_select_file: file not found: %s\n' "$1" >&2; return 1; }
+
+  _f_source_type="file"
+  _f_items_file=$1
+  _f_dynamic_callback=""
+  _f_items=()
+
+  f_select
+}
+
+f_select_dynamic() {
+  [[ $# -eq 1 ]] || { printf 'f.sh: f_select_dynamic: exactly 1 argument expected, got %d\n' "$#" >&2; return 1; }
+  declare -F "$1" >/dev/null 2>&1 || { printf 'f.sh: f_select_dynamic: function not found: %s\n' "$1" >&2; return 1; }
+
+  _f_source_type="dynamic"
+  _f_dynamic_callback=$1
+  _f_items_file=""
+  _f_items=()
+
+  f_select
+}
+
 f_select() {
   if (("$#" > 0)); then
     _f_items=("$@")
-  elif ((${#_f_items[@]} == 0)); then
+    _f_source_type="array"
+    _f_items_file=""
+    _f_dynamic_callback=""
+  elif [[ $_f_source_type == "array" && ${#_f_items[@]} -eq 0 ]]; then
     printf 'f.sh: f_select: no items provided\n' >&2
     return 1
   fi
@@ -910,11 +976,13 @@ f_select() {
   _f_filter_pending=0
   _f_filter_pid=''
   _f_filter_stale_pids=()
+  _f_search_pending_query=''
+  _f_search_pending_at=0
 
   f_init_terminal || return 1
   _f_setup_traps
 
-  local key keychar selected pick
+  local key keychar selected
   _f_filter_request ''
   f_render
 
@@ -928,6 +996,14 @@ f_select() {
 
     if _f_filter_poll; then
       f_render
+    fi
+
+    if [[ -n $_f_search_pending_query ]]; then
+      if (($(_f_now_ms) - _f_search_pending_at >= f_search_delay)); then
+        _f_filter_request "$_f_search_pending_query"
+        _f_search_pending_query=''
+        f_render
+      fi
     fi
 
     ((_f_cancelled)) && return 1
@@ -950,20 +1026,23 @@ f_select() {
         ;;
       backspace|delete)
         if ((${#_f_query} > 0)); then
-          _f_filter_request "${_f_query:0:${#_f_query}-1}"
+          _f_query="${_f_query:0:${#_f_query}-1}"
+          _f_search_pending_query=$_f_query
+          _f_search_pending_at=$(_f_now_ms)
           f_render
         fi
         ;;
       char:*)
         keychar=${key#char:}
-        _f_filter_request "${_f_query}${keychar}"
+        _f_query="${_f_query}${keychar}"
+        _f_search_pending_query=$_f_query
+        _f_search_pending_at=$(_f_now_ms)
         f_render
         ;;
       enter)
         ((_f_filter_pending)) && continue
         if ((${#_f_filtered[@]} > 0)); then
-          pick=${_f_filtered[_f_cursor]}
-          selected=${_f_items[pick]}
+          selected=${_f_filtered[_f_cursor]}
           _f_clear_traps
           f_restore_terminal
           printf '%s\n' "$selected"

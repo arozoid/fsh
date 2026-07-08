@@ -74,6 +74,10 @@ pkg_installed() {
   esac
 }
 
+_f_pkg_installed_provider() {
+  pkg_installed
+}
+
 pick_from_list() {
   local prompt=$1
   shift
@@ -149,7 +153,12 @@ main() {
         search_and_install
         ;;
       'Remove package')
-        pkg=$(pick_from_list 'Remove:' pkg_installed) || continue
+        fsh_menu_defaults
+        f_min_query_length=2
+        f_prompt='Remove: '
+        f_height=15
+        f_border=1
+        pkg=$(f_select_dynamic _f_pkg_installed_provider) || continue
         pkg_remove "$pkg"
         ;;
       'Upgrade system')
