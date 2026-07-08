@@ -112,13 +112,37 @@ config vars (set before `f_select`):
 | `f_height` | `10` | number of visible list rows |
 | `f_border` | `0` | `1` to draw a box around the list |
 | `f_fuzzy` | `1` | `1` hybrid fuzzy+substring, `0` substring-only (exact match filter) |
-| `f_smart_priority` | `0` | `1` to guarantee normal (substring) hits always rank above fuzzy-only hits — see below |
+| `f_smart_priority` | `0` | `1` to guarantee normal (substring) hits always rank above fuzzy-only hits |
 | `f_hints` | `1` | `0` hides the key-hint line |
 | `f_marker` | `1` | `0` hides the `▸` cursor marker |
 | `f_status` | `1` | `0` hides the match count / scroll info |
 | `f_min_query_length` | `0` | minimum characters before filtering starts (see below) |
 | `f_search_delay` | `100` | milliseconds to wait after last keystroke before searching — debounces fast typing |
 | `f_color_*`, `f_reset` | ansi escapes | colors for each ui element |
+
+### `f_color_*` and `f_reset`
+
+every visible element of the menu has its own color variable. set them to any ANSI escape sequence:
+
+| variable | default | element |
+|----------|---------|---------|
+| `f_color_prompt` | `\033[1;35m` (bold magenta) | prompt string |
+| `f_color_query` | `\033[1;37m` (bold white) | typed query |
+| `f_color_normal` | `\033[0m` (reset) | normal list items |
+| `f_color_selected` | `\033[46;30;1m` (cyan bg, black, bold) | highlighted / selected item |
+| `f_color_border` | `\033[90m` (bright black) | box border (when `f_border=1`) |
+| `f_color_match` | `\033[1;33m` (bold yellow) | matched characters within items |
+| `f_color_dim` | `\033[2m` (dim) | dimmed / secondary text |
+| `f_reset` | `\033[0m` | reset after each colored segment |
+
+you only need to set the variables you want to override — the rest keep their defaults:
+
+```bash
+f_color_prompt=$'\033[1;32m'   # green prompt
+f_color_match=$'\033[1;31m'    # red highlights
+```
+
+`fsh_menu_defaults` resets all of them to the base defaults on every call.
 
 ### alternate data sources
 
