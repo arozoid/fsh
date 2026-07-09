@@ -30,6 +30,7 @@ _f_items=()
 _f_filtered=()
 _f_query=''
 _f_cursor=0
+_f_cursor_pos=0
 _f_scroll=0
 _f_last_key=''
 _f_last_string=''
@@ -135,7 +136,7 @@ _f_now_ms() {
 _f_update_dimensions() {
   local size h w
 
-  if size=$(stty size <&${_F_FD_TTY_IN} 2>/dev/null); then
+  if size=$(stty size </dev/tty 2>/dev/null); then
     h=${size%% *}
     w=${size##* }
     if [[ $h =~ ^[0-9]+$ && $w =~ ^[0-9]+$ ]]; then
@@ -195,11 +196,7 @@ _f_compute_layout() {
 }
 
 _f_tty_set_raw() {
-  stty -echo -icanon -isig -ixon -ixoff \
-       -inlcr -igncr -icrnl -iexten \
-       min 1 time 0 <&${_F_FD_TTY_IN} 2>/dev/null \
-    || stty -echo -icanon -isig min 1 time 0 <&${_F_FD_TTY_IN} 2>/dev/null \
-    || true
+  stty -echo -icanon -isig min 0 time 0 </dev/tty 2>/dev/null || true
 }
 
 f_init_terminal() {
@@ -244,7 +241,7 @@ f_init_terminal() {
   _f_fuzzy=${f_fuzzy:-1}
   _f_smart_priority=${f_smart_priority:-0}
 
-  _f_tty_saved=$(stty -g <&${_F_FD_TTY_IN} 2>/dev/null) || _f_tty_saved=''
+  _f_tty_saved=$(stty -g </dev/tty 2>/dev/null) || _f_tty_saved=''
   _f_tty_set_raw
   bind 'set bind-tty-special-chars off' 2>/dev/null || true
 
@@ -304,7 +301,7 @@ f_restore_terminal() {
   _f_tty_show_cursor
 
   if [[ -n $_f_tty_saved ]]; then
-    stty "$_f_tty_saved" <&${_F_FD_TTY_IN} 2>/dev/null || true
+    stty "$_f_tty_saved" </dev/tty 2>/dev/null || true
     _f_tty_saved=''
   fi
 
@@ -477,7 +474,8 @@ f_filter_items() {
     case $_f_source_type in
       file)     mapfile -t _f_new_filtered < <(head -n "$f_preview_count" "$_f_items_file") ;;
       dynamic)  mapfile -t _f_new_filtered < <("$_f_dynamic_callback" "" | head -n "$f_preview_count") ;;
-      *)        _f_new_filtered=("${_f_items[@]}") ;;
+      *)        _f_new_filtered=("${_f_items[@]}")
+                ((${#_f_new_filtered[@]} > f_preview_count)) && _f_new_filtered=("${_f_new_filtered[@]:0:f_preview_count}") ;;
     esac
     _f_filtered=("${_f_new_filtered[@]}")
     return
@@ -820,7 +818,15 @@ _f_build_rows() {
     display_query=$_f_query
   fi
   _f_display_query=$display_query
-  _f_render_rows[$_f_prompt_row]="${c_prompt}${prompt}${c_reset} ${c_query}${display_query}${c_reset}█${c_reset}"
+  local cursor_display=$_f_cursor_pos
+  ((cursor_display > ${#display_query})) && cursor_display=${#display_query}
+  if ((${#_f_query} > 0)); then
+    local before=${display_query:0:cursor_display}
+    local after=${display_query:cursor_display}
+    _f_render_rows[$_f_prompt_row]="${c_prompt}${prompt}${c_reset} ${c_query}${before}${c_reset}│${c_query}${after}${c_reset}"
+  else
+    _f_render_rows[$_f_prompt_row]="${c_prompt}${prompt}${c_reset} ${c_query}${c_reset}│${c_reset}"
+  fi
   _f_render_row_nums+=("$_f_prompt_row")
 }
 
@@ -897,7 +903,7 @@ _f_read_byte() {
 }
 
 f_read_key() {
-  local timeout=${1:-} k k1 k2 k3 rest
+  local timeout=${1:-} k k1 k2 k3
   _f_last_key=''
 
   if [[ -n $timeout ]]; then
@@ -912,38 +918,29 @@ f_read_key() {
   fi
 
   case $k in
+    $'\x01') _f_last_key='ctrl-a' ;;
     $'\x03') _f_last_key='ctrl-c' ;;
     $'\x04') _f_last_key='ctrl-d' ;;
+    $'\x05') _f_last_key='ctrl-e' ;;
     $'\x1c') _f_last_key='ctrl-\\' ;;
     $'\x7f'|$'\b') _f_last_key='backspace' ;;
     $'\x1b')
       _f_read_byte k1 0.03 || k1=''
-      case $k1 in
-        '[')
-          _f_read_byte k2 0.03 || k2=''
-          case $k2 in
-            A) _f_last_key='up' ;;
-            B) _f_last_key='down' ;;
-            C) _f_last_key='right' ;;
-            D) _f_last_key='left' ;;
-            3)
-              _f_read_byte k3 0.03 || k3=''
-              [[ $k3 == '~' ]] && _f_last_key='delete'
-              ;;
-          esac
-          ;;
-        O)
-          _f_read_byte k2 0.03 || k2=''
-          case $k2 in
-            A) _f_last_key='up' ;;
-            B) _f_last_key='down' ;;
-            C) _f_last_key='right' ;;
-            D) _f_last_key='left' ;;
-          esac
-          ;;
+      _f_read_byte k2 0.03 || k2=''
+      case "$k1$k2" in
+        '[A') _f_last_key='up' ;;
+        '[B') _f_last_key='down' ;;
+        '[C') _f_last_key='right' ;;
+        '[D') _f_last_key='left' ;;
+        'OA') _f_last_key='up' ;;
+        'OB') _f_last_key='down' ;;
+        'OC') _f_last_key='right' ;;
+        'OD') _f_last_key='left' ;;
+        '[3') _f_read_byte k3 0.03; [[ $k3 == '~' ]] && _f_last_key='delete' ;;
       esac
-      while _f_read_byte rest 0.001 && [[ -n $rest ]]; do :; done
-      [[ -n $_f_last_key ]] || _f_last_key='esc'
+      if [[ -z $_f_last_key ]]; then
+        _f_last_key='esc'
+      fi
       ;;
     '')
       return 1
@@ -996,6 +993,7 @@ f_select() {
 
   _f_query=''
   _f_cursor=0
+  _f_cursor_pos=0
   _f_scroll=0
   _f_cancelled=0
   _f_filter_seq=0
@@ -1025,10 +1023,11 @@ f_select() {
       f_render
     fi
 
-    if [[ -n $_f_search_pending_query ]]; then
+    if ((_f_search_pending_at > 0)); then
       if (($(_f_now_ms) - _f_search_pending_at >= f_search_delay)); then
         _f_filter_request "$_f_search_pending_query"
         _f_search_pending_query=''
+        _f_search_pending_at=0
         f_render
       fi
     fi
@@ -1051,9 +1050,34 @@ f_select() {
         fi
         f_render
         ;;
-      backspace|delete)
-        if ((${#_f_query} > 0)); then
-          _f_query="${_f_query:0:${#_f_query}-1}"
+      left)
+        ((_f_cursor_pos > 0)) && ((_f_cursor_pos--))
+        f_render
+        ;;
+      right)
+        ((_f_cursor_pos < ${#_f_query})) && ((_f_cursor_pos++))
+        f_render
+        ;;
+      home|ctrl-a)
+        _f_cursor_pos=0
+        f_render
+        ;;
+      end|ctrl-e)
+        _f_cursor_pos=${#_f_query}
+        f_render
+        ;;
+      backspace)
+        if ((_f_cursor_pos > 0)); then
+          _f_query="${_f_query:0:_f_cursor_pos-1}${_f_query:_f_cursor_pos}"
+          ((_f_cursor_pos--))
+          _f_search_pending_query=$_f_query
+          _f_search_pending_at=$(_f_now_ms)
+          f_render
+        fi
+        ;;
+      delete)
+        if ((_f_cursor_pos < ${#_f_query})); then
+          _f_query="${_f_query:0:_f_cursor_pos}${_f_query:_f_cursor_pos+1}"
           _f_search_pending_query=$_f_query
           _f_search_pending_at=$(_f_now_ms)
           f_render
@@ -1061,13 +1085,33 @@ f_select() {
         ;;
       char:*)
         keychar=${key#char:}
-        _f_query="${_f_query}${keychar}"
+        _f_query="${_f_query:0:_f_cursor_pos}${keychar}${_f_query:_f_cursor_pos}"
+        ((_f_cursor_pos++))
         _f_search_pending_query=$_f_query
         _f_search_pending_at=$(_f_now_ms)
         f_render
         ;;
       enter)
-        ((_f_filter_pending)) && continue
+        if ((_f_search_pending_at > 0)); then
+          _f_filter_request "$_f_search_pending_query"
+          _f_search_pending_query=''
+          _f_search_pending_at=0
+        fi
+        if ((_f_filter_pending)); then
+          while ((_f_filter_pending)); do
+            if _f_filter_poll; then
+              f_render
+              break
+            fi
+            if ((_f_cancelled)); then return 1; fi
+            if ! f_read_key 0.05; then
+              continue
+            fi
+            case $_f_last_key in
+              esc|ctrl-c|ctrl-d|ctrl-\\) return 1 ;;
+            esac
+          done
+        fi
         if ((${#_f_filtered[@]} > 0)); then
           selected=${_f_filtered[_f_cursor]}
           _f_clear_traps

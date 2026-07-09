@@ -140,7 +140,7 @@ every visible element of the menu has its own color variable. set them to any AN
 | `f_color_dim` | `\033[2m` (dim) | dimmed / secondary text |
 | `f_reset` | `\033[0m` | reset after each colored segment |
 
-you only need to set the variables you want to override — the rest keep their defaults:
+you only need to set the variables you want to override, and the rest keep their defaults:
 
 ```bash
 f_color_prompt=$'\033[1;32m'   # green prompt
@@ -153,7 +153,7 @@ f_color_match=$'\033[1;31m'    # red highlights
 
 entry points for large lists that stay off the shell heap or stream results from a provider:
 
-- `f_select_file FILE` — read candidates directly from `FILE` during filtering (never mapfile the whole file). usage:
+- `f_select_file FILE`: read candidates directly from `FILE` during filtering (never mapfile the whole file). usage:
 
 ```bash
 fsh_menu_defaults
@@ -162,7 +162,7 @@ f_fuzzy=0
 choice=$(f_select_file symbols.txt) || exit 1
 ```
 
-- `f_select_dynamic CALLBACK` — call `CALLBACK` with the current query; the callback should print matching lines to stdout. this is useful for paged or external providers that can limit results themselves. usage:
+- `f_select_dynamic CALLBACK`: call `CALLBACK` with the current query; the callback should print matching lines to stdout. this is useful for paged or external providers that can limit results themselves. usage:
 
 ```bash
 my_provider() {

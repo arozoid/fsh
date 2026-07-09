@@ -49,7 +49,8 @@ main() {
   choice=$(f_select_file "$CLIP_FILE") || exit 0
 
   printf '%s' "$choice" | fsh_clipboard
-  printf 'Copied: %s\n' "${choice:0:80}" >&2
+  printf '\033[1m%s\033[0m\n' "$choice"
+  sleep 3
 }
 
 main "$@"

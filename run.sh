@@ -44,7 +44,7 @@ main() {
     fsh_menu_defaults
     f_prompt='Run: '
     f_height=15
-    f_search_delay=0
+    f_search_delay=100
     f_border=1
     choice=$(f_select "${FSH_SCRIPT_LABELS[@]}") || exit 0
     run_script "$choice" || true

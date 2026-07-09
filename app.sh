@@ -71,6 +71,20 @@ app_source_tag() {
   esac
 }
 
+_flatpak_entries() {
+  local app id name
+  flatpak list --app --columns=application 2>/dev/null || return 1
+}
+
+_snap_entries() {
+  local name desktop
+  snap list 2>/dev/null | awk 'NR>1 {print $1}' | while IFS= read -r name; do
+    for desktop in "/snap/$name/current/meta/gui"/*.desktop; do
+      [[ -f $desktop ]] && printf '%s\n' "$desktop"
+    done
+  done
+}
+
 list_apps() {
   local dir file label source
   local -a entries=() lines=()
@@ -86,6 +100,31 @@ list_apps() {
       ((label_count[$label]++))
     done < <(find "$dir" -name '*.desktop' -type f -print0 2>/dev/null)
   done < <(build_desktop_dirs)
+
+  while IFS= read -r app; do
+    [[ -n $app ]] || continue
+    for dir in "$HOME/.local/share/flatpak/exports/share/applications" /var/lib/flatpak/exports/share/applications; do
+      file="$dir/$app.desktop"
+      if [[ -f $file ]]; then
+        desktop_visible "$file" || continue
+        label=$(desktop_name "$file")
+        [[ -n $label ]] || continue
+        entries+=("$label"$'\t'"$file")
+        ((label_count[$label]++))
+        break
+      fi
+    done
+  done < <(flatpak list --app --columns=application 2>/dev/null || true)
+
+  local snap_desktop
+  while IFS= read -r snap_desktop; do
+    [[ -f $snap_desktop ]] || continue
+    desktop_visible "$snap_desktop" || continue
+    label=$(desktop_name "$snap_desktop")
+    [[ -n $label ]] || continue
+    entries+=("$label"$'\t'"$snap_desktop")
+    ((label_count[$label]++))
+  done < <(_snap_entries)
 
   ((${#entries[@]} > 0)) || return 1
 

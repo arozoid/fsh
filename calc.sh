@@ -64,16 +64,13 @@ main() {
       expr=${choice#$'\033[1m'}
       _calc_history+=("$expr")
       result=${expr#* = }
-      printf '%s' "$result" | fsh_clipboard
-      printf 'Copied: %s\n' "$result" >&2
     else
       result=${choice#* = }
       result=${result#* ≈ }
-      printf '%s' "$result" | fsh_clipboard
-      printf 'Copied: %s\n' "$result" >&2
-      printf '\nPress Enter to return to calculator…' >&2
-      read -r _ </dev/tty
     fi
+    printf '%s' "$result" | fsh_clipboard
+    printf '\033[1m%s\033[0m\n' "$result"
+    sleep 3
   done
 }
 

@@ -62,7 +62,8 @@ copy_cmd() {
   else
     die 'no clipboard tool (wl-copy, xclip, xsel)'
   fi
-  printf 'Copied to clipboard.\n' >&2
+  printf '\033[1m%s\033[0m\n' "$cmd"
+  sleep 3
 }
 
 main() {

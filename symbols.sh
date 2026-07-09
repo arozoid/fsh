@@ -19,4 +19,5 @@ choice=$(f_select_file "$SYMBOLS_FILE") || exit 0
 symbol=${choice%% *}
 
 printf '%s' "$symbol" | fsh_clipboard
-echo "$symbol"
+printf '\033[1m%s\033[0m\n' "$symbol"
+sleep 3
