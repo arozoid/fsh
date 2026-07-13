@@ -88,7 +88,7 @@ reinstall to sync an existing copy:
 * **power.sh:** lock, suspend, logout, reboot, shutdown
 * **hist.sh:** fuzzy-pick shell history
 * **pkg.sh:** package helper — search & install, remove, list installed, upgrade (`apk`, `apt`, `dnf`, `pacman`)
-* **symbols.sh:** copy 40,000+ emojis unicode symbols
+* **symbols.sh:** copy 40,000+ emojis and unicode symbols
 
 ---
 
